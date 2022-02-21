@@ -3,7 +3,6 @@ This is the repository for the Trust Assignment of the course on Collaborative A
 The repository contains the Block Worlds for Teams (BW4T) test bed, an agent coordination and communication test bed, using the MATRX software package. 
 The BW4T test-bed consists of multiple rooms containing coloured blocks. 
 Two or more agents need to collect these blocks and deliver them to a drop off point that dictates the block colour and order of collection.
-Currently, runni
 
 ## Overview
 - directories:
