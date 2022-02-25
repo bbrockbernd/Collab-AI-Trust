@@ -12,7 +12,7 @@ class BW4TBrain(BW4TAgentBrain, ABC):
         
     NOT_ALLOWED_PARAMS:Final[Set[str]] ={'remove_range', 'grab_range', 'door_range', 'action_duration'}
     
-    DEFAULT_SETTINGS:Final[Dict[str,object]]={'slowdown':1}
+    DEFAULT_SETTINGS:Final[Dict[str,object]]={'slowdown':1, 'grab_range':1}
 
     def __init__(self, settings:Dict[str,object]):
         '''
