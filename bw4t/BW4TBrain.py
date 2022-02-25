@@ -10,9 +10,9 @@ class BW4TBrain(BW4TAgentBrain, ABC):
     BW4T agents must implement decide_on_bw4t_action
     """
         
-    NOT_ALLOWED_PARAMS:Final[Set[str]] ={'remove_range', 'grab_range', 'door_range'}
+    NOT_ALLOWED_PARAMS:Final[Set[str]] ={'remove_range', 'grab_range', 'door_range', 'action_duration'}
     
-    DEFAULT_SETTINGS:Final[Dict[str,object]]={'slowdown':1,'grab_range':1}
+    DEFAULT_SETTINGS:Final[Dict[str,object]]={'slowdown':1}
 
     def __init__(self, settings:Dict[str,object]):
         '''
@@ -35,6 +35,7 @@ class BW4TBrain(BW4TAgentBrain, ABC):
     @final
     def decide_on_action(self, state:State):
         act,params = self.decide_on_bw4t_action(state)  
+        params['grab_range']=1
         params['max_objects']=1
         params['action_duration'] = self.__settings['slowdown']      
         if self.__settings['grab_range']>1:
