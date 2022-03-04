@@ -98,6 +98,7 @@ class BaseLineAgent(BW4TBrain):
         '''
         Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
         '''
+        # You can change the default value to your preference
         default = 0.5
         trustBeliefs = {}
         for member in received.keys():
