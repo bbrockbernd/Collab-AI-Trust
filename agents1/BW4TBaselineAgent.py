@@ -1,4 +1,5 @@
-
+import csv
+import os
 from typing import final, List, Dict, Final
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
@@ -36,11 +37,11 @@ class BaseLineAgent(BW4TBrain):
         # Add team members
         for member in state['World']['team_members']:
             if member!=agent_name and member not in self._teamMembers:
-                self._teamMembers.append(member)       
+                self._teamMembers.append(member)
         # Process messages from team members
         receivedMessages = self._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        self._trustBelief(agent_name, self._teamMembers, receivedMessages)
         
         while True:
             if Phase.PLAN_PATH_TO_CLOSED_DOOR==self._phase:
@@ -94,18 +95,50 @@ class BaseLineAgent(BW4TBrain):
                     receivedMessages[member].append(mssg.content)       
         return receivedMessages
 
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
-                    break
-        return trustBeliefs
+    '''
+    Compute the trust belief value based on trust and reputation
+    '''
+    def _computeTrustBeliefs(self, agents):
+        trust_beliefs = {}
+        for [agent, trust, rep] in agents:
+            trust_beliefs[agent] = (2 * trust + rep) / 3
+        return trust_beliefs
+
+    '''
+    Trust mechanism for all Agents
+    '''
+    def _trustBelief(self, name, members, received):
+        # Read (or initialize) memory file
+        default = 0.3
+        filename = name + '_memory.csv'
+        params = ['Agent', 'Trust', 'Reputation']
+        agents = []
+        try:
+            with open(filename, 'r') as mem_file:
+                memory = csv.reader(mem_file)
+                next(memory)
+                for row in memory:
+                    agents.append(row)
+        except FileNotFoundError:
+            with open(filename, 'w', newline='') as mem_file:
+                memory = csv.writer(mem_file)
+                memory.writerow(params)
+
+                for member in members:
+                    agents.append([member, default, default])
+                memory.writerows(agents)
+
+        # Process received messages
+        # for member in received.keys():
+        #     for message in received[member]:
+        #         print(name + member + message)
+
+        # Save back to memory file
+        os.remove(filename)
+        with open(filename, 'w', newline='') as mem_file:
+            memory = csv.writer(mem_file)
+            memory.writerow(params)
+            memory.writerows(agents)
+
+        # return self._computeTrustBeliefs(agents)
+
