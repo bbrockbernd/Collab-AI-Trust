@@ -15,6 +15,14 @@ class Phase(enum.Enum):
     FOLLOW_PATH_TO_CLOSED_DOOR=2,
     OPEN_DOOR=3
 
+class MessageType(enum.Enum):
+    MOVING = 1
+    OPENING = 2
+    SEARCHING = 3
+    FOUND = 4
+    PICKING_UP = 5
+    DROPPED = 6
+    INVALID = 7
 
 class BaseLineAgent(BW4TBrain):
 
@@ -56,7 +64,7 @@ class BaseLineAgent(BW4TBrain):
                 # Location in front of door is south from door
                 doorLoc = doorLoc[0],doorLoc[1]+1
                 # Send message of current action
-                self._sendMessage('Moving to door of ' + self._door['room_name'], agent_name)
+                self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
                 self._navigator.add_waypoints([doorLoc])
                 self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
@@ -97,19 +105,57 @@ class BaseLineAgent(BW4TBrain):
 
     '''
     Compute the trust belief value based on trust and reputation
+    Direct Experiences influence more than Reputation
     '''
     def _computeTrustBeliefs(self, agents):
         trust_beliefs = {}
         for [agent, trust, rep] in agents:
-            trust_beliefs[agent] = (2 * trust + rep) / 3
+            trust_beliefs[agent] = (2 * float(trust) + float(rep)) / 3
         return trust_beliefs
 
     '''
-    Trust mechanism for all Agents
+    Transform text message into data
+    '''
+    def _normalizeMessage(self, received):
+        """
+        Communication protocol:
+        Moving to [room_name]
+        Opening door of [room_name]
+        Searching through [room_name]
+        Found goal block [block_visualization] at location [location]
+        Picking up goal block [block_visualization] at location [location]
+        Dropped goal block [block_visualization] at drop location [location]
+        """
+        message = received.split()
+        if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
+            return MessageType.MOVING, [message[2]]
+        elif len(message) == 4 and ' '.join(message[:3]) == 'Opening door of':
+            return MessageType.OPENING, [message[3]]
+        elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
+            return MessageType.SEARCHING, [message[2]]
+        elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
+            return MessageType.FOUND, [received[received.find('{')+1:received.find('}')],
+                                       received[received.find('(')+1:received.find(')')]]
+        elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
+            return MessageType.DROPPED, [received[received.find('{')+1:received.find('}')],
+                                         received[received.find('(')+1:received.find(')')]]
+        elif len(message) > 3 and ' '.join(message[:4]) == 'Picking up goal block':
+            return MessageType.PICKING_UP, [received[received.find('{')+1:received.find('}')],
+                                            received[received.find('(')+1:received.find(')')]]
+        else:
+            return MessageType.INVALID, []
+
+    '''
+    Verify that the same message is not processed twice
+    '''
+    def _checkIfMessageAlreadyRecieved(self, received):
+        return False
+    '''
+    Trust mechanism (same) for all Agents
     '''
     def _trustBelief(self, name, members, received):
         # Read (or initialize) memory file
-        default = 0.3
+        default = 0.5
         filename = name + '_memory.csv'
         params = ['Agent', 'Trust', 'Reputation']
         agents = []
@@ -129,9 +175,9 @@ class BaseLineAgent(BW4TBrain):
                 memory.writerows(agents)
 
         # Process received messages
-        # for member in received.keys():
-        #     for message in received[member]:
-        #         print(name + member + message)
+        for member in received.keys():
+            for message in received[member]:
+                self._normalizeMessage(message)
 
         # Save back to memory file
         os.remove(filename)
@@ -140,5 +186,5 @@ class BaseLineAgent(BW4TBrain):
             memory.writerow(params)
             memory.writerows(agents)
 
-        # return self._computeTrustBeliefs(agents)
+        return self._computeTrustBeliefs(agents)
 
