@@ -1,5 +1,6 @@
 import csv
 import os
+from collections import Counter
 from typing import final, List, Dict, Final
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
@@ -30,6 +31,7 @@ class BaseLineAgent(BW4TBrain):
         super().__init__(settings)
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
+        self._log = {}
 
     def initialize(self):
         super().initialize()
@@ -162,14 +164,18 @@ class BaseLineAgent(BW4TBrain):
         try:
             with open(filename, 'r') as mem_file:
                 memory = csv.reader(mem_file)
+                if os.stat(filename).st_size == 0:
+                    raise FileNotFoundError
                 next(memory)
                 for row in memory:
                     agents.append(row)
+                if Counter(members) != Counter([agent[0] for agent in agents]):
+                    raise FileNotFoundError
         except FileNotFoundError:
             with open(filename, 'w', newline='') as mem_file:
                 memory = csv.writer(mem_file)
                 memory.writerow(params)
-
+                agents = []  # clear any previously appended data if agent mismatch
                 for member in members:
                     agents.append([member, default, default])
                 memory.writerows(agents)
@@ -177,10 +183,9 @@ class BaseLineAgent(BW4TBrain):
         # Process received messages
         for member in received.keys():
             for message in received[member]:
-                self._normalizeMessage(message)
+                message_type, message_data = self._normalizeMessage(message)
 
         # Save back to memory file
-        os.remove(filename)
         with open(filename, 'w', newline='') as mem_file:
             memory = csv.writer(mem_file)
             memory.writerow(params)
