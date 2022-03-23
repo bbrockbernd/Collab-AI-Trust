@@ -200,6 +200,7 @@ class BaseLineAgent(BW4TBrain):
                     agents.append([member, default, default])
                 memory.writerows(agents)
 
+        agents = [[agent[0], float(agent[1]), float(agent[2])] for agent in agents]
         # Process received messages
         for member in received.keys():
             # Agent index for trust modification
