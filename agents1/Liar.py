@@ -23,7 +23,8 @@ class Phase(enum.Enum):
     GRAB_BLOCK = 8,
     PLAN_TO_DROP_ZONE = 9,
     FOLLOW_PATH_TO_DROP_ZONE = 10,
-    DROP_BLOCK = 11
+    DROP_BLOCK_AT_COLLECTION_POINT = 11
+    DROP_BLOCK_WEST_OF_COLLECTION_POINT = 12
 
 
 class Liar(BW4TBrain):
@@ -44,16 +45,13 @@ class Liar(BW4TBrain):
         self.receivedInformation = []
         
         # Known data since we have seen it
-        self.knownBlocks = []
-        self.knownBlockKeys = []
+        self.knownBlocks = {}
         
-        self.knownGoalBlocks = []
-        self.blocksDelivered = []
+        # self.knownGoalBlocks = []
+        self.knownGoalBlocks = {}
         
         # The blocks we need to collect
-        self.collectBlocks = []
-        self.collectBlocksBackup = []
-        self.dropOffLocations = []
+        self.collectBlocks = {}
         
         self.blockToGrab = None
         self.locationToDropOff = None
@@ -76,7 +74,8 @@ class Liar(BW4TBrain):
         self._trustBlief(self._teamMembers, receivedMessages)
         
         
-        
+        # pprint.pprint(state.get_world_info())
+        # pprint.pprint(state.get_traverse_map())
         # print("Extracting the map")
         # map=state.get_traverse_map()
         # width, length = state.get_world_info()['grid_shape']
@@ -90,25 +89,27 @@ class Liar(BW4TBrain):
         
         
         while True:
+            
             if Phase.SET_UP_VARIABLES==self._phase:
-                
                 for key in state.keys():
                     if "Collect_Block" in key:
-                        self.collectBlocks.append(state[key])
-                        self.collectBlocksBackup.append(state[key])
-                    # print(key, state[key])
+                        self.collectBlocks[key] = state[key]
+                        self.collectBlocks[key]['drop_actions'] = []
+                        self.collectBlocks[key]['is_delivered_confirmed'] = False
+                        self.collectBlocks[key]['is_delivered_by_me'] = False # dropActions = {'agent': None, 'number': None}
                 self.roomsToExplore = [door for door in state.values()
-                    if 'class_inheritance' in door and 'Door' in door['class_inheritance']]      
+                    if 'class_inheritance' in door and 'Door' in door['class_inheritance']] 
+                         
                 self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
                 
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
                 self._navigator.reset_full()
                 if len(self.roomsToExplore)==0:
-                    print("all rooms are opened")
+                    print("all rooms are explored")
                     self._phase=Phase.PLAN_TO_GOAL_BLOCK
                     return None, {}
                 # Randomly pick a closed door
-                self._door = random.choice(self.roomsToExplore)
+                self._door = self.roomsToExplore[0]#random.choice(self.roomsToExplore)
                 self.roomsToExplore.remove(self._door)
                 doorLoc = self._door['location']
                 # Location in front of door is south from door
@@ -117,7 +118,7 @@ class Liar(BW4TBrain):
                 msgDoor = random.choice([door for door in state.values()
                     if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
                     and door['room_name'] is not self._door['room_name']])['room_name'] if self.toLieOrNotToLieZetsTheKwestion() else self._door['room_name']
-                self._sendMessage('Moving to door of ' + str(msgDoor), agent_name)
+                self._sendMessage('Moving to ' + str(msgDoor), agent_name)
 
                 self._navigator.add_waypoints([doorLoc])
                 self._phase=Phase.FOLLOW_PATH_TO_UNSEARCHED_ROOM
@@ -136,9 +137,13 @@ class Liar(BW4TBrain):
                 door = random.choice([door for door in state.values()
                     if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
                     and door['room_name'] is not self._door['room_name']]) if self.toLieOrNotToLieZetsTheKwestion() else self._door
+                
+                # Send message IFF there is a door to be opened
                 if not self._door['is_open']:
-                    self._sendMessage('Opening door of ' + str(door['room_name']), agent_name)
-                return "OpenDoorAction" , {'object_id':self._door['obj_id']}
+                    for block in state.keys():
+                        if "door" in block and state[block]["obj_id"] == self._door['obj_id'] and not state[block]["is_open"]:
+                            self._sendMessage('Opening door of ' + str(door['room_name']), agent_name)
+                            return "OpenDoorAction" , {'object_id':self._door['obj_id']}
             
             elif Phase.PLAN_ROOM_EXPLORATION==self._phase:
                 self._navigator.reset_full()
@@ -169,6 +174,11 @@ class Liar(BW4TBrain):
                 self._navigator.add_waypoints(waypoints)
                 self._phase=Phase.EXPLORE_ROOM
                 
+                msg = random.choice([door for door in state.values()
+                    if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
+                    and door['room_name'] is not self._door['room_name']])['room_name'] if self.toLieOrNotToLieZetsTheKwestion() else self._door['room_name']
+                self._sendMessage("Searching through "  + str(msg), agent_name)
+                
             if Phase.EXPLORE_ROOM==self._phase:
 
                 self._state_tracker.update(state)
@@ -177,14 +187,19 @@ class Liar(BW4TBrain):
                 for block in state.keys():
                     if "Block_in" in block:
                         obj_id = state[block]["obj_id"]
-                        if obj_id not in self.knownBlockKeys:
-                            self.knownBlockKeys.append(obj_id)
-                            self.knownBlocks.append(state[block])
-                            for goalBlock in self.collectBlocks:
-                                if self.sameVizuals(goalBlock, state[block]):
-                                    self.knownGoalBlocks.append(state[block])
-                                    messageBlock = random.choice([block for block in self.collectBlocks
-                                        if goalBlock is not block ]) if self.toLieOrNotToLieZetsTheKwestion() else state[block]
+                        if obj_id not in self.knownBlocks.keys():
+                            self.knownBlocks[obj_id] = state[block]
+                            for collectBlock in self.collectBlocks.values():
+                                if self.sameVizuals(collectBlock, state[block]):
+                                    
+                                    self.knownGoalBlocks[obj_id] = state[block]
+                                    self.knownGoalBlocks[obj_id]['is_delivered'] = False
+                                    self.knownGoalBlocks[obj_id]['is_delivered_by_me'] = False
+                                    
+                                                                   
+                                    messageBlock = random.choice([otherBlock for otherBlock in self.collectBlocks.values()
+                                        if not self.sameVizuals(collectBlock, otherBlock) ]) if self.toLieOrNotToLieZetsTheKwestion() else state[block] ##breacks on same blocks
+                                    
                                     msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  messageBlock["visualization"]['colour']}) + " at location " + str(state[block]['location'])
                                     self._sendMessage(msg, agent_name)
                 if action!=None:
@@ -194,13 +209,18 @@ class Liar(BW4TBrain):
             if Phase.PLAN_TO_GOAL_BLOCK==self._phase:
                 self._navigator.reset_full()
                 print("PLANNING 2 GO 2 GOAL BLOCK")
-                
-                if len(self.collectBlocks) > 0:
-                    collectBlock = self.collectBlocks.pop(0)
-                else: 
+                collectBlock = None
+                for _collectBlock in self.collectBlocks.values():
+                    if not _collectBlock['is_delivered_by_me'] and len(_collectBlock['drop_actions']) == 0 and not _collectBlock['is_delivered_confirmed']:
+                        collectBlock = _collectBlock
+                        break
+
+                if collectBlock is None:
                     return None, {}
-                for block in self.knownGoalBlocks:
-                    if self.sameVizuals(collectBlock, block):
+                    
+                for block_id in self.knownGoalBlocks:
+                    block = self.knownGoalBlocks[block_id]
+                    if self.knownGoalBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                         self.blockToGrab = block
                         break
                         
@@ -209,7 +229,7 @@ class Liar(BW4TBrain):
                 msgDoor = random.choice([door for door in state.values()
                     if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
                     and door['room_name'] is not roomOfBlock])['room_name'] if self.toLieOrNotToLieZetsTheKwestion() else roomOfBlock
-                self._sendMessage('Moving to door of ' + str(msgDoor), agent_name) #edit to be able to lie
+                self._sendMessage('Moving to ' + str(msgDoor), agent_name) #edit to be able to lie
 
                 
                 self._navigator.add_waypoints([self.blockToGrab['location']])
@@ -219,7 +239,6 @@ class Liar(BW4TBrain):
                 self._state_tracker.update(state)
                 # Follow path to door
                 action = self._navigator.get_move_action(self._state_tracker)
-                # pprint.pprint(action)
                 if action!=None:
                     return action, {}   
                 self._phase=Phase.GRAB_BLOCK
@@ -229,8 +248,8 @@ class Liar(BW4TBrain):
                 block = self.blockToGrab
                 location = self.blockToGrab['location']
                 if lie and len(self.knownGoalBlocks) > 1:
-                    block = random.choice([block for block in self.knownGoalBlocks
-                    if not self.sameVizuals(block, self.blockToGrab)])
+                    block = random.choice([block for block_id in self.knownGoalBlocks
+                    if not self.sameVizuals(self.knownGoalBlocks[block_id], self.blockToGrab)])
                 elif lie:
                     location = (math.ceil(random.random() * location[0]), math.ceil(random.random() * location[1])) ## SHOULD BE IMPROVED
                     
@@ -245,9 +264,9 @@ class Liar(BW4TBrain):
                 self._navigator.reset_full()
                 carriedBlock = self.agent_properties['is_carrying'][0]
                 location = (0,0)
-                for collecBlock in self.collectBlocksBackup:                 
-                    if (self.sameVizuals(collecBlock, carriedBlock)): 
-                        location = collecBlock['location']
+                for collectBlock in self.collectBlocks.values():                 
+                    if (self.sameVizuals(collectBlock, carriedBlock)): 
+                        location = collectBlock['location']
                 self._navigator.add_waypoints([location])
                 self.locationToDropOff = location
                 self._phase=Phase.FOLLOW_PATH_TO_GOAL_BLOCK
@@ -258,29 +277,65 @@ class Liar(BW4TBrain):
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
                     return action, {}   
-                self._phase=Phase.DROP_BLOCK
+                self._phase=Phase.DROP_BLOCK_AT_COLLECTION_POINT
                 
-            if Phase.DROP_BLOCK==self._phase:
-                carriedBlock = self.agent_properties['is_carrying'][0]
-                lie = self.toLieOrNotToLieZetsTheKwestion()
-                location = self.locationToDropOff
-                block = carriedBlock
-                if lie: 
-                    if len(self.collectBlocks) > 0:
-                        block = random.choice([block for block in self.collectBlocks
-                            if (block['visualization']['shape'] is not carriedBlock['visualization']['shape']) or
-                            (block['visualization']['colour']   is not carriedBlock['visualization']['colour']) or
-                            (block['visualization']['size']     is not carriedBlock['visualization']['size'])])
-                        location = block['location']
-                    else: 
-                        block = self.knownBlocks[0]
-                self._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
-                                  + ', "shape": ' + str(block['visualization']['shape'])
-                                  + ', "colour": ' + str(block['visualization']['colour'])
-                                  + '} at drop location ' + str(location), agent_name)
+            if Phase.DROP_BLOCK_AT_COLLECTION_POINT==self._phase:
+                if not self.checkGoalBlockPresent(state):
+                    self.dropGoalBlockAtCollectPoint(state)
+                    self.msgAboutDropLocation(state) 
+                    return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }            
+                else: 
+                    for collectBlock in self.collectBlocks.values():
+                        if collectBlock['location'] == state[self.agent_id]['location']:    
+                            self.collectBlocks[collectBlock['obj_id']]['is_delivered_confirmed'] = True
+                    self._phase=Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT
+                    self.msgAboutDropLocation(state) 
+                    return "MoveWest", {}
+                
+            if Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT==self._phase:
                 self._phase=Phase.PLAN_TO_GOAL_BLOCK
-                return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }            
+                carriedBlockId = self.agent_properties['is_carrying'][0]['obj_id']
+                self.knownGoalBlocks[carriedBlockId]['is_delivered_by_me'] = True
+                self.knownGoalBlocks[carriedBlockId]['is_delivered'] = True
+                return "DropObject", {'object_id':carriedBlockId}  
+    
+    def msgAboutDropLocation(self, state:State):
+        carriedBlock = self.agent_properties['is_carrying'][0]
+        lie = self.toLieOrNotToLieZetsTheKwestion()
+        location = state[self.agent_id]['location']
+        block = carriedBlock
+        
+        if lie: 
+            if len(self.collectBlocks) > 0:
+                block = random.choice([block for block in self.collectBlocks.values()
+                    if  (block['visualization']['shape']  is not carriedBlock['visualization']['shape']) or
+                        (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
+                        (block['visualization']['size']   is not carriedBlock['visualization']['size'])])
                 
+        self._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
+                            + ', "shape": ' + str(block['visualization']['shape'])
+                            + ', "colour": ' + str(block['visualization']['colour'])
+                            + '} at drop location ' + str(location), state[self.agent_id]['obj_id'])
+            
+    def checkGoalBlockPresent(self, state:State):
+        for block in state.keys():
+            if "Block_in" in block and state[block]["location"] == state[self.agent_id]['location']:
+                return True
+        return False
+    
+    def dropGoalBlockAtCollectPoint(self, state:State):
+        carriedBlock = self.agent_properties['is_carrying'][0]
+
+        self._phase=Phase.PLAN_TO_GOAL_BLOCK
+    
+        self.knownGoalBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
+        self.knownGoalBlocks[carriedBlock['obj_id']]['is_delivered'] = True
+        for key in self.collectBlocks.keys():
+            if self.collectBlocks[key]['location'] == state[self.agent_id]['location']:
+                self.collectBlocks[key]['is_delivered_by_me'] = True
+                self.collectBlocks[key]['is_delivered_confirmed'] = True
+                break   
+      
     def sameVizuals(self, block1, block2):
         return (block1['visualization']['shape'] == block2['visualization']['shape'] and
                     block1['visualization']['colour'] == block2['visualization']['colour'] and
