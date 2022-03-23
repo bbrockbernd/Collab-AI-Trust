@@ -51,7 +51,7 @@ class BaseLineAgent(BW4TBrain):
         # Process messages from team members
         receivedMessages = self._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBelief(agent_name, self._teamMembers, receivedMessages)
+        self._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         while True:
             if Phase.PLAN_PATH_TO_CLOSED_DOOR==self._phase:
@@ -102,8 +102,21 @@ class BaseLineAgent(BW4TBrain):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)       
+                    receivedMessages[member].append(mssg.content)
+        self.received_messages = []  # Clear previous messages
         return receivedMessages
+
+    '''
+    Find the room (if any) based on a given location
+    '''
+    def _getRoom(self, location, state: State):
+        rooms = state.get_all_room_names()
+        for room in rooms:
+            objects = state.get_room_objects(room)
+            for obj in objects:
+                if obj[location] == location:
+                    return room
+        raise Exception
 
     '''
     Compute the trust belief value based on trust and reputation
@@ -130,11 +143,11 @@ class BaseLineAgent(BW4TBrain):
         """
         message = received.split()
         if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
-            return MessageType.MOVING, [message[2]]
+            return MessageType.MOVING, message[2]
         elif len(message) == 4 and ' '.join(message[:3]) == 'Opening door of':
-            return MessageType.OPENING, [message[3]]
+            return MessageType.OPENING, message[3]
         elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
-            return MessageType.SEARCHING, [message[2]]
+            return MessageType.SEARCHING, message[2]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
             return MessageType.FOUND, [received[received.find('{')+1:received.find('}')],
                                        received[received.find('(')+1:received.find(')')]]
@@ -150,14 +163,21 @@ class BaseLineAgent(BW4TBrain):
     '''
     Verify that the same message is not processed twice
     '''
-    def _checkIfMessageAlreadyRecieved(self, received):
+    def _checkIfMessageAlreadyRecieved(self, member, message_type, message_data):
+        if member in self._log:
+            if message_type in self._log[member]:
+                if message_data == self._log[member][message_type]:
+                    return True
         return False
+
     '''
     Trust mechanism (same) for all Agents
     '''
-    def _trustBelief(self, name, members, received):
+    def _trustBelief(self, name, members, received, state: State):
         # Read (or initialize) memory file
-        default = 0.5
+        default = 0.0
+        truth = 0.1
+        lie = 0.5
         filename = name + '_memory.csv'
         params = ['Agent', 'Trust', 'Reputation']
         agents = []
@@ -182,8 +202,88 @@ class BaseLineAgent(BW4TBrain):
 
         # Process received messages
         for member in received.keys():
+            # Agent index for trust modification
+            member_index = [name for name, trust, reputation in agents].index(member)
+
             for message in received[member]:
-                message_type, message_data = self._normalizeMessage(message)
+                message_type, message_data = self._normalizeMessage(message)  # Preprocess message
+                if not self._checkIfMessageAlreadyRecieved(member, message_type, message_data):  # Check for duplicates
+                    if member in self._log:
+                        # Check if found previous instance of message type
+                        type_already_exists = message_type in self._log[member]
+
+                        # Check if message is of type FOUND and already has data
+                        if message_type == MessageType.FOUND:
+                            # Store message
+                            if type_already_exists:
+                                found_blocks = self._log[member][message_type]
+                                found_blocks.append(message_data)
+                                self._log[member][message_type] = found_blocks
+                            else:
+                                self._log[member][message_type] = [message_data]
+
+                            # Trust: Check if blocks FOUND are in the room the agent said they were SEARCHING
+                            if MessageType.SEARCHING in self._log[member] and self._log[member][MessageType.SEARCHING]\
+                                    == self._getRoom(message_data[1], state):
+                                agents[member_index][1] += truth
+                            else:
+                                agents[member_index][1] -= lie
+
+                        # Check if message is of type PICKING_UP or DROPPED and already has data (max 2)
+                        elif message_type == MessageType.PICKING_UP or message_type == MessageType.DROPPED:
+
+                            # Store message
+                            if type_already_exists:
+                                if len(self._log[member][message_type]) > 1:  # Strong can pick up 2
+                                    self._log[member][message_type] = [message_data]
+                                else:
+                                    blocks = self._log[member][message_type]
+                                    blocks.append(message_data)
+                                    self._log[member][message_type] = blocks
+                            else:
+                                self._log[member][message_type] = [message_data]
+
+                            # Trust: For PICKING_UP check if agent moved to that room beforehand
+                            if message_type == MessageType.PICKING_UP:
+                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING] ==\
+                                        self._getRoom(message_data[1], state):
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+
+                            # Trust: For DROPPED check if agent picked up that block before
+                            if message_type == MessageType.DROPPED:
+                                if MessageType.PICKING_UP in self._log[member] and message_data[0] in\
+                                        [block for block, location in self._log[member][MessageType.PICKING_UP]]:
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+
+                        # All the other messages have max 1 consecutive type of message
+                        else:
+                            # Store message
+                            self._log[member][message_type] = message_data
+
+                            # Trust: For OPENING check if correct door is indeed open
+                            if message_type == MessageType.OPENING:
+                                open_doors_room = [door['room_name'] for door in state.values()
+                                                   if 'class_inheritance' in door and 'Door' in door[
+                                                   'class_inheritance'] and door['is_open']]
+                                if message_data in open_doors_room:
+                                    agents[member_index][1] += truth  # Reevaluate if adding truth value here is useful
+                                else:
+                                    agents[member_index][1] -= lie
+
+                            # Trust: For SEARCHING check if agent was moving to that room
+                            if message_type == MessageType.SEARCHING:
+                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING]\
+                                        == message_data:
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+                    else:
+                        self._log[member] = {}
+                        self._log[member][message_type] = message_data
 
         # Save back to memory file
         with open(filename, 'w', newline='') as mem_file:
