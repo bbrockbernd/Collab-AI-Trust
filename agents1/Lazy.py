@@ -17,7 +17,8 @@ class Phase(enum.Enum):
     OPEN_DOOR = 4
     PICKUP = 5
     DROP = 6
-    EXPLORE_ROOM = 7
+    PLAN_ROOM_EXPLORE = 7
+    EXPLORE_ROOM = 8
 
 
 class Mode(enum.Enum):
@@ -25,64 +26,61 @@ class Mode(enum.Enum):
     GOAL = 1
 
 class MyDropPoint:
-    def __init__(self, shape: int, color: str, location: (int, int)):
+    def __init__(self, obj_id: str, shape: int, color: str, location: (int, int)):
         self.shape = shape
         self.location = location
         self.color = color
+        self.obj_id = obj_id
+        self.completed = False
+        self.goals: List[MyBlock] = []
 
         # Not sure if this is unique
         self.myid = str(shape) + color
 
-class MyGoal:
-    def __init__(self, shape: int, color: str, location: (int, int)):
-        self.shape = shape
-        self.color = color
-        self.location = location
-        self.dropPoint = None
-        self.x = location[0]
-        self.y = location[1]
-        self.completed = False
-        self.myid = str(shape) + color
-
-    def set_drop_point(self, dp: MyDropPoint):
-        self.dropPoint = dp
-
 
 class MyBlock:
-    def __init__(self, shape: int, color: str, location: (int, int),
+    def __init__(self, obj_id:str, shape: int, color: str, location: (int, int), room: str,
         isGoal=False):
         self.shape = shape
         self.color = color
         self.isGoal = isGoal
         self.location = location
+        self.dropPoint = None
         self.x = location[0]
         self.y = location[1]
+        self.completed = False
+        self.room = room
+        self.myid = str(shape) + color
+        self.obj_id = obj_id
 
-    def setGoal(self, isGoal: bool):
-        self.isGoal = isGoal
+    def set_drop_point(self, dp: MyDropPoint):
+        self.dropPoint = dp
 
 
 class MyRoom:
 
-    def __init__(self, roomName: str, doorDict: {}):
+    def __init__(self, roomName: str, doorDict: {}, roomContents: []):
         self.name = roomName
-        self.contents = []
-        self.goals = []
+        self.blocks = []
         self.explored = False
         self.doorLoc = doorDict['location']
         self.doorOpen = False
         self.doorId = doorDict['obj_id']
+        self.roomSquares = [room['location'] for room in roomContents if 'area' in room['name']]
+
+    def getGoals(self):
+        return [block for block in self.blocks if block.isGoal]
 
 
 class MyWorld:
     def __init__(self):
         self.rooms = {}
-        self.goals: [MyGoal] = []
-        self.dropPoints: [MyDropPoint] = {}
+        self.dropPoints: List[MyDropPoint] = []
         self.doorLocs = {}
+        self.blocks = {}
 
-    def addRoom(self, roomName: str, doorDict: {}):
-        room = MyRoom(roomName, doorDict)
+    def addRoom(self, roomName: str, doorDict: {}, roomContents: []):
+        room = MyRoom(roomName, doorDict, roomContents)
         self.rooms[room.name] = room
         self.doorLocs[room.doorLoc] = room.name
 
@@ -92,28 +90,31 @@ class MyWorld:
     def getUnexploredRooms(self) -> List[MyRoom]:
         return [room for room in self.rooms.values() if not room.explored]
 
-    def addGoal(self, goal: MyGoal):
-        try:
-            dp = self.dropPoints[goal.myid]
-            goal.dropPoint = dp
-            self.goals.append(goal)
-        except KeyError:
+    def addBlock(self, block: MyBlock):
+        if block.obj_id in self.blocks.keys():
             return
+        self.blocks[block.obj_id] = block
+        self.rooms[block.room].blocks.append(block)
 
-    def getGoals(self) -> [MyGoal]:
-        return self.goals
+        for dp in self.dropPoints:
+            if dp.myid == block.myid:
+                block.dropPoint = dp
+                block.isGoal = True
+                dp.goals.append(block)
 
-    def hasGoals(self) -> bool:
-        return len(self.goals) > 0
+
+    def getGoals(self) -> [MyBlock]:
+        for dp in self.dropPoints:
+            if dp.completed:
+                continue
+            return [block for block in dp.goals if not block.completed]
+
+        return []
+
 
     def addDropPoint(self, dp: MyDropPoint):
-        self.dropPoints[dp.myid] = dp
+        self.dropPoints.append(dp)
 
-    def validateGoal(self, block: MyBlock) -> bool:
-        for goal in self.goals:
-            if goal.x == block.x and goal.y == block.y:
-                return True
-        return False
 
     def am_i_at_door(self, location: (int, int)) -> str:
         try:
@@ -135,6 +136,7 @@ class Lazy(BW4TBrain):
         self._current_state: State = None
         self._location = (0, 0)
         self._current_door_id = ""
+        self._inventory = None
 
         self.doStuff = {
             Phase.INITIALIZE: self.init_vars,
@@ -142,6 +144,10 @@ class Lazy(BW4TBrain):
             Phase.CALCULATING: self.calculate,
             Phase.MOVING: self.moving,
             Phase.OPEN_DOOR: self.open_door,
+            Phase.EXPLORE_ROOM: self.explore_room,
+            Phase.PLAN_ROOM_EXPLORE: self.plan_room_explore,
+            Phase.DROP: self.drop_block,
+            Phase.PICKUP: self.pickup_block,
         }
 
     def initialize(self):
@@ -166,26 +172,29 @@ class Lazy(BW4TBrain):
         for room in state.get_all_room_names():
             if 'room' not in room:
                 continue
-            self._world.addRoom(room, state.get_room_doors(room)[0])
+            self._world.addRoom(room, state.get_room_doors(room)[0], state.get_room(room))
         for key in state.keys():
             if "Collect_Block" in key:
                 location = state[key]['location']
                 colour = state[key]['visualization']['colour']
                 shape = state[key]['visualization']['shape']
-                self._world.addDropPoint(MyDropPoint(shape, colour, location))
+                self._world.addDropPoint(MyDropPoint(key, shape, colour, location))
+
+        self._world.dropPoints.sort(key= lambda dp: dp.obj_id)
 
         return self.next(Phase.WHAT_TO_DO)
 
     def what_to_do(self) -> (str, {}):
-        if self._world.hasGoals():
+        if len(self._world.getGoals()) > 0:
             self._mode = Mode.GOAL
             self._destination = self._world.getGoals()[0].location
-            self._dest_id = self._world.getGoals()[0]
+            self._dest_id = self._world.getGoals()[0].obj_id
             print("Going to Goal")
         else:
             self._mode = Mode.EXPLORING
             self._destination = self._world.getUnexploredRooms()[0].doorLoc
             self._destination = (self._destination[0], self._destination[1] + 1)
+            self._dest_id = self._world.getUnexploredRooms()[0].name
             print("Going to explore")
 
         return self.next(Phase.CALCULATING)
@@ -201,21 +210,68 @@ class Lazy(BW4TBrain):
         action = self._navigator.get_move_action(self._state_tracker)
         room_id = self._world.am_i_at_door((self._location[0],
                                             self._location[1] - 1))
+
         if room_id != "" and not self._world.getRoom(room_id).doorOpen:
             self._current_door_id = self._world.getRoom(room_id).doorId
             return self.next(Phase.OPEN_DOOR)
-            return
 
         if action != None:
             return action, {}
 
         if self._mode == Mode.EXPLORING:
-            # explore room
-            return next(Phase.EXPLORE_ROOM)
+            return self.next(Phase.PLAN_ROOM_EXPLORE)
+
+        if self._mode == Mode.GOAL and self._inventory is None:
+            return self.next(Phase.PICKUP)
+
+        if self._mode == Mode.GOAL and self._inventory is not None:
+            return self.next(Phase.DROP)
+
+    def pickup_block(self) -> (str, {}):
+        block = self._world.blocks[self._dest_id]
+        self._dest_id = block.dropPoint.obj_id
+        self._destination = block.dropPoint.location
+        self._phase = Phase.CALCULATING
+        self._inventory = block
+        return GrabObject.__name__, {'object_id': block.obj_id}
+
+    def drop_block(self) -> (str, {}):
+        block = self._inventory
+        self._inventory = None
+        block.completed = True
+        block.dropPoint.completed = True
+        self._phase = Phase.WHAT_TO_DO
+        return DropObject.__name__, {'object_id': block.obj_id}
 
     def open_door(self) -> (str, {}):
         self._phase = Phase.MOVING
         return OpenDoorAction.__name__, {'object_id': self._current_door_id}
+
+    def plan_room_explore(self) -> (str, {}):
+
+        assert 'room' in self._dest_id
+        roomSquares = self._world.getRoom(self._dest_id).roomSquares
+        self._navigator.reset_full()
+        self._navigator.add_waypoints(roomSquares)
+        return self.next(Phase.EXPLORE_ROOM)
+
+    def explore_room(self) -> (str, {}):
+        for key in self._current_state.keys():
+            if 'Block_in' in key and key not in self._world.blocks:
+                block_obj = self._current_state[key]
+                block = MyBlock(block_obj['obj_id'], block_obj['visualization']['shape'], block_obj['visualization']['colour'], block_obj['location'], self._dest_id)
+                self._world.addBlock(block)
+                print(f'added block {key}')
+
+        self._state_tracker.update(self._current_state)
+        action = self._navigator.get_move_action(self._state_tracker)
+
+        if action != None:
+            return action, {}
+
+        self._world.getRoom(self._dest_id).explored = True
+        return self.next(Phase.WHAT_TO_DO)
+
 
     def next(self, phase: Phase = None) -> (str, {}):
         if phase is not None:
