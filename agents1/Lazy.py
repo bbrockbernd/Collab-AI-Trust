@@ -168,14 +168,14 @@ class Lazy(BW4TBrain):
 
     def what_am_i_doing(self):
         self._counter += 1
-        if Mode.GOAL:
+        if self._mode is Mode.GOAL:
             return
 
         if len(self._world.getGoals()) > 0 and self._phase is not Phase.EXPLORE_ROOM:
             self._sendMessage('Quitting current task', self._agent_id)
             self._phase = Phase.WHAT_TO_DO
 
-        if self._counter == 10 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
+        if self._counter > 7 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
             self._sendMessage('Quitting current task', self._agent_id)
             self._phase = Phase.WHAT_TO_DO
 
