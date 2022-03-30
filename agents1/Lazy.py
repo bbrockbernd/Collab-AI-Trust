@@ -179,6 +179,11 @@ class Lazy(BW4TBrain):
 
     def what_am_i_doing(self):
         self._counter += 1
+
+        if self._mode == Mode.GOAL and self._inventory is not None:
+            if self._inventory.dropPoint.completed:
+                self._phase = Phase.DROP
+
         if self._mode is Mode.GOAL:
             return
 
@@ -189,11 +194,6 @@ class Lazy(BW4TBrain):
         if self._counter > 7 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
             self._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
-
-
-        if self._mode == Mode.GOAL and self._inventory is not None:
-            if self._inventory.dropPoint.completed:
-                self.next(Phase.DROP)
 
 
     def init_vars(self) -> (str, {}):
