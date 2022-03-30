@@ -412,8 +412,18 @@ class Liar(BW4TBrain):
             else:
                 waypoints.append((door['location']))
         self._navigator.add_waypoints(waypoints)
-        
     
+    def validateBlock(self, location, color: str, shape: int): 
+        possible_blocks = []
+        for block in self.knownBlocks.values():
+            if (block['visualization']['location'] == location):
+                possible_blocks.append(block)
+                if (block['visualization']['colour'] == color and 
+                    block['visualization']['shape'] == shape):
+                        return 1
+        if len(possible_blocks) == 0:
+            return 0
+        return -1
     
     def _getRoomSize(self, room, state:State):
         startX = startY = endX = endY = None
