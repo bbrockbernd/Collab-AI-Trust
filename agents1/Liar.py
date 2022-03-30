@@ -208,22 +208,26 @@ class Liar(BW4TBrain):
         doorLoc = doorLoc[0],doorLoc[1]+1
         # Send message of current action
         self._navigator.add_waypoints([doorLoc])  
-    
-    def _planPathToGoalBlock(self):
-        self._navigator.reset_full()
-        collectBlock = None
+        
+    def getBlockToGrab(self):
         for _collectBlock in self.collectBlocks.values():
             if not _collectBlock['is_delivered_by_me'] and not _collectBlock['is_delivered_confirmed']:
                 collectBlock = _collectBlock
                 
                 if collectBlock is None:
-                    return False
+                    return None
         
                 for block_id in self.knownBlocks:
                     block = self.knownBlocks[block_id]
                     if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                         self.blockToGrab = block
-                        break
+                        return block
+                    
+    def _planPathToGoalBlock(self):
+        self._navigator.reset_full()
+        collectBlock = self.getBlockToGrab()
+        if collectBlock is None:
+            return None, {}
         self._navigator.add_waypoints([self.blockToGrab['location']])
         
               
