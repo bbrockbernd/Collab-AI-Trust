@@ -152,9 +152,9 @@ class Liar(BW4TBrain):
             
             if Phase.PLAN_TO_DROP_ZONE==self._phase:
                 self._planPathToDropOff()
-                self._phase=Phase.FOLLOW_PATH_TO_GOAL_BLOCK
+                self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
             
-            if Phase.FOLLOW_PATH_TO_GOAL_BLOCK==self._phase:
+            if Phase.FOLLOW_PATH_TO_DROP_ZONE==self._phase:
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
