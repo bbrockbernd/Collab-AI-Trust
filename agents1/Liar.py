@@ -1,13 +1,12 @@
 
-from hashlib import sha1
-from typing import final, List, Dict, Final
+from typing import Dict
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.messages.message import Message
-import pprint
+
 import numpy as np
 import math
 
@@ -157,7 +156,6 @@ class Liar(BW4TBrain):
                 
                 self._sendGrabBlockMessage(state)
                 self._phase=Phase.PLAN_TO_DROP_ZONE
-                print("GRAPPING: ", self.blockToGrab['obj_id'])
                 return "GrabObject", {'object_id':self.blockToGrab['obj_id'] } 
             
             if Phase.PLAN_TO_DROP_ZONE==self._phase:
