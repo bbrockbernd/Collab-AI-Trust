@@ -288,15 +288,17 @@ class Liar(BW4TBrain):
         self._sendMessage('Opening door of ' + str(door['room_name']), state[self.agent_id]['obj_id'])
          
     def sendGoalBlockFoundMessage(self, state:State, block):
+        toLie = self.toLieOrNotToLieZetsTheKwestion()
         lieOptions = [otherBlock for otherBlock in self.collectBlocks.values()
                     if not self.sameVizuals(block, otherBlock)]
+        location = str(state[block['obj_id']]['location'])
         if len(lieOptions) > 0:
-            lie = random.choice(lieOptions)
-            location = str(state[block['obj_id']]['location'])
+            lie = random.choice(lieOptions) 
+            
         else: 
             lie = state[block['obj_id']]
-            location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location']
-        messageBlock = lie if self.toLieOrNotToLieZetsTheKwestion() else state[block['obj_id']] 
+            location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location'] if toLie else location
+        messageBlock = lie if toLie else state[block['obj_id']] 
         msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  messageBlock["visualization"]['colour']}) + " at location " + location
         self._sendMessage(msg, state[self.agent_id]['obj_id'])
     
