@@ -196,15 +196,15 @@ class Liar(BW4TBrain):
         for _collectBlock in self.collectBlocks.values():
             if not _collectBlock['is_delivered_by_me'] and not _collectBlock['is_delivered_confirmed']:
                 collectBlock = _collectBlock
-
-        if collectBlock is None:
-            return False
-            
-        for block_id in self.knownBlocks:
-            block = self.knownBlocks[block_id]
-            if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
-                self.blockToGrab = block
-                break
+                
+                if collectBlock is None:
+                    return False
+        
+                for block_id in self.knownBlocks:
+                    block = self.knownBlocks[block_id]
+                    if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
+                        self.blockToGrab = block
+                        break
         self._navigator.add_waypoints([self.blockToGrab['location']])
         
               
