@@ -3,6 +3,7 @@ from bw4t.statistics import Statistics
 from agents1.BW4TBaselineAgent import BaseLineAgent
 from agents1.BW4THuman import Human
 from agents1.Liar import Liar
+from agents1.Lazy import Lazy
 
 
 """
@@ -12,14 +13,15 @@ press the start button in god mode to start the session.
 
 if __name__ == "__main__":
     agents = [
-        {'name':'agent1', 'botclass':Liar, 'settings':{}},
-        {'name':'agent2', 'botclass':Liar, 'settings':{}},
-        {'name':'human', 'botclass':Human, 'settings':{}}
+      # {'name': 'agent1', 'botclass': BaseLineAgent, 'settings': {}},
+        {'name':'Liar', 'botclass':Liar, 'settings':{}},
+        {'name':'human', 'botclass':Human, 'settings':{}},
+        {'name': 'Lazy', 'botclass': Lazy, 'settings': {}}
         ]
 
     print("Started world...")
     wordsetttings = DEFAULT_WORLDSETTINGS
-    wordsetttings['tick_duration'] = 0.001
+    wordsetttings['tick_duration'] = 0.1 #set lower for faster speed, default seems 0.1
     world=BW4TWorld(agents, worldsettings=wordsetttings).run()
     print("DONE!")
     print(Statistics(world.getLogger().getFileName()))

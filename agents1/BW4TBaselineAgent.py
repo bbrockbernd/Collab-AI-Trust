@@ -1,4 +1,6 @@
-
+import csv
+import os
+from collections import Counter
 from typing import final, List, Dict, Final
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
@@ -14,6 +16,14 @@ class Phase(enum.Enum):
     FOLLOW_PATH_TO_CLOSED_DOOR=2,
     OPEN_DOOR=3
 
+class MessageType(enum.Enum):
+    MOVING = 1
+    OPENING = 2
+    SEARCHING = 3
+    FOUND = 4
+    PICKING_UP = 5
+    DROPPED = 6
+    INVALID = 7
 
 class BaseLineAgent(BW4TBrain):
 
@@ -21,6 +31,7 @@ class BaseLineAgent(BW4TBrain):
         super().__init__(settings)
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
+        self._log = {}
 
     def initialize(self):
         super().initialize()
@@ -36,11 +47,11 @@ class BaseLineAgent(BW4TBrain):
         # Add team members
         for member in state['World']['team_members']:
             if member!=agent_name and member not in self._teamMembers:
-                self._teamMembers.append(member)       
+                self._teamMembers.append(member)
         # Process messages from team members
         receivedMessages = self._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        self._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         while True:
             if Phase.PLAN_PATH_TO_CLOSED_DOOR==self._phase:
@@ -55,7 +66,7 @@ class BaseLineAgent(BW4TBrain):
                 # Location in front of door is south from door
                 doorLoc = doorLoc[0],doorLoc[1]+1
                 # Send message of current action
-                self._sendMessage('Moving to door of ' + self._door['room_name'], agent_name)
+                self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
                 self._navigator.add_waypoints([doorLoc])
                 self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
@@ -91,21 +102,195 @@ class BaseLineAgent(BW4TBrain):
         for mssg in self.received_messages:
             for member in teamMembers:
                 if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)       
+                    receivedMessages[member].append(mssg.content)
+        self.received_messages = []  # Clear previous messages
         return receivedMessages
 
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
+    '''
+    Find the room (if any) based on a given location
+    '''
+    def _getRoom(self, location, state: State):
+        rooms = state.get_all_room_names()
+        for room in rooms:
+            objects = state.get_room_objects(room)
+            for obj in objects:
+                if obj[location] == location:
+                    return room
+        raise Exception
+
+    '''
+    Compute the trust belief value based on trust and reputation
+    Direct Experiences influence more than Reputation
+    '''
+    def _computeTrustBeliefs(self, agents):
+        trust_beliefs = {}
+        for [agent, trust, rep] in agents:
+            trust_beliefs[agent] = (2 * float(trust) + float(rep)) / 3
+        return trust_beliefs
+
+    '''
+    Transform text message into data
+    '''
+    def _normalizeMessage(self, received):
+        """
+        Communication protocol:
+        Moving to [room_name]
+        Opening door of [room_name]
+        Searching through [room_name]
+        Found goal block [block_visualization] at location [location]
+        Picking up goal block [block_visualization] at location [location]
+        Dropped goal block [block_visualization] at drop location [location]
+        """
+        message = received.split()
+        if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
+            return MessageType.MOVING, message[2]
+        elif len(message) == 4 and ' '.join(message[:3]) == 'Opening door of':
+            return MessageType.OPENING, message[3]
+        elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
+            return MessageType.SEARCHING, message[2]
+        elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
+            return MessageType.FOUND, [received[received.find('{')+1:received.find('}')],
+                                       received[received.find('(')+1:received.find(')')]]
+        elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
+            return MessageType.DROPPED, [received[received.find('{')+1:received.find('}')],
+                                         received[received.find('(')+1:received.find(')')]]
+        elif len(message) > 3 and ' '.join(message[:4]) == 'Picking up goal block':
+            return MessageType.PICKING_UP, [received[received.find('{')+1:received.find('}')],
+                                            received[received.find('(')+1:received.find(')')]]
+        else:
+            return MessageType.INVALID, []
+
+    '''
+    Verify that the same message is not processed twice
+    '''
+    def _checkIfMessageAlreadyRecieved(self, member, message_type, message_data):
+        if member in self._log:
+            if message_type in self._log[member]:
+                if message_data == self._log[member][message_type]:
+                    return True
+        return False
+
+    '''
+    Trust mechanism (same) for all Agents
+    '''
+    def _trustBelief(self, name, members, received, state: State):
+        # Read (or initialize) memory file
+        default = 0.0
+        truth = 0.1
+        lie = 0.5
+        filename = name + '_memory.csv'
+        params = ['Agent', 'Trust', 'Reputation']
+        agents = []
+        try:
+            with open(filename, 'r') as mem_file:
+                memory = csv.reader(mem_file)
+                if os.stat(filename).st_size == 0:
+                    raise FileNotFoundError
+                next(memory)
+                for row in memory:
+                    agents.append(row)
+                if Counter(members) != Counter([agent[0] for agent in agents]):
+                    raise FileNotFoundError
+        except FileNotFoundError:
+            with open(filename, 'w', newline='') as mem_file:
+                memory = csv.writer(mem_file)
+                memory.writerow(params)
+                agents = []  # clear any previously appended data if agent mismatch
+                for member in members:
+                    agents.append([member, default, default])
+                memory.writerows(agents)
+
+        agents = [[agent[0], float(agent[1]), float(agent[2])] for agent in agents]
+        # Process received messages
         for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
+            # Agent index for trust modification
+            member_index = [name for name, trust, reputation in agents].index(member)
+
             for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
-                    break
-        return trustBeliefs
+                message_type, message_data = self._normalizeMessage(message)  # Preprocess message
+                if not self._checkIfMessageAlreadyRecieved(member, message_type, message_data):  # Check for duplicates
+                    if member in self._log:
+                        # Check if found previous instance of message type
+                        type_already_exists = message_type in self._log[member]
+
+                        # Check if message is of type FOUND and already has data
+                        if message_type == MessageType.FOUND:
+                            # Store message
+                            if type_already_exists:
+                                found_blocks = self._log[member][message_type]
+                                found_blocks.append(message_data)
+                                self._log[member][message_type] = found_blocks
+                            else:
+                                self._log[member][message_type] = [message_data]
+
+                            # Trust: Check if blocks FOUND are in the room the agent said they were SEARCHING
+                            if MessageType.SEARCHING in self._log[member] and self._log[member][MessageType.SEARCHING]\
+                                    == self._getRoom(message_data[1], state):
+                                agents[member_index][1] += truth
+                            else:
+                                agents[member_index][1] -= lie
+
+                        # Check if message is of type PICKING_UP or DROPPED and already has data (max 2)
+                        elif message_type == MessageType.PICKING_UP or message_type == MessageType.DROPPED:
+
+                            # Store message
+                            if type_already_exists:
+                                if len(self._log[member][message_type]) > 1:  # Strong can pick up 2
+                                    self._log[member][message_type] = [message_data]
+                                else:
+                                    blocks = self._log[member][message_type]
+                                    blocks.append(message_data)
+                                    self._log[member][message_type] = blocks
+                            else:
+                                self._log[member][message_type] = [message_data]
+
+                            # Trust: For PICKING_UP check if agent moved to that room beforehand
+                            if message_type == MessageType.PICKING_UP:
+                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING] ==\
+                                        self._getRoom(message_data[1], state):
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+
+                            # Trust: For DROPPED check if agent picked up that block before
+                            if message_type == MessageType.DROPPED:
+                                if MessageType.PICKING_UP in self._log[member] and message_data[0] in\
+                                        [block for block, location in self._log[member][MessageType.PICKING_UP]]:
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+
+                        # All the other messages have max 1 consecutive type of message
+                        else:
+                            # Store message
+                            self._log[member][message_type] = message_data
+
+                            # Trust: For OPENING check if correct door is indeed open
+                            if message_type == MessageType.OPENING:
+                                open_doors_room = [door['room_name'] for door in state.values()
+                                                   if 'class_inheritance' in door and 'Door' in door[
+                                                   'class_inheritance'] and door['is_open']]
+                                if message_data in open_doors_room:
+                                    agents[member_index][1] += truth  # Reevaluate if adding truth value here is useful
+                                else:
+                                    agents[member_index][1] -= lie
+
+                            # Trust: For SEARCHING check if agent was moving to that room
+                            if message_type == MessageType.SEARCHING:
+                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING]\
+                                        == message_data:
+                                    agents[member_index][1] += truth
+                                else:
+                                    agents[member_index][1] -= lie
+                    else:
+                        self._log[member] = {}
+                        self._log[member][message_type] = message_data
+
+        # Save back to memory file
+        with open(filename, 'w', newline='') as mem_file:
+            memory = csv.writer(mem_file)
+            memory.writerow(params)
+            memory.writerows(agents)
+
+        return self._computeTrustBeliefs(agents)
+
