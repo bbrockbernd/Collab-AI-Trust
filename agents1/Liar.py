@@ -142,11 +142,30 @@ class Liar(BW4TBrain):
                 self._phase=Phase.GRAB_BLOCK
             
             if Phase.GRAB_BLOCK==self._phase:
+                
+                blocks = self.detectBlocksAround(state)
+                ids = []
+                for block in blocks:
+                    ids.append(block['obj_id'])
+                if self.blockToGrab['obj_id'] not in ids:
+                    #BLOCK NOT ON LAST KNOWN LOCATION
+                    del self.knownBlocks[self.blockToGrab['obj_id']]
+                    self._phase = Phase.PLAN_TO_GOAL_BLOCK
+                    continue
+                        
+                
                 self._sendGrabBlockMessage(state)
                 self._phase=Phase.PLAN_TO_DROP_ZONE
+                print("GRAPPING: ", self.blockToGrab['obj_id'])
                 return "GrabObject", {'object_id':self.blockToGrab['obj_id'] } 
             
             if Phase.PLAN_TO_DROP_ZONE==self._phase:
+                if(len(self.agent_properties['is_carrying']) == 0):
+                    #NO BLOCKS BRAPPED
+                    self._phase = Phase.PLAN_TO_GOAL_BLOCK
+                    continue
+                
+                
                 self._planPathToDropOff()
                 self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
             
