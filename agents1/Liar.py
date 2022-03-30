@@ -231,12 +231,17 @@ class Liar(BW4TBrain):
     def _planPathToDropOff(self):
         self._navigator.reset_full()
         carriedBlock = self.agent_properties['is_carrying'][0]
-        location = (0,0)
-        for collectBlock in self.collectBlocks.values():                 
-            if (self.sameVizuals(collectBlock, carriedBlock)): 
-                location = collectBlock['location']
+        location = (0, 0)
+        ids = list(self.collectBlocks.keys())
+        ids.sort()
+        
+        for name in ids:            
+            if (self.sameVizuals(self.collectBlocks[name], carriedBlock)): 
+                loc = self.collectBlocks[name]["location"]
+                if loc[1] > location[1]:
+                    location = loc
         self._navigator.add_waypoints([location])
-        self.locationToDropOff = location 
+        self.locationToDropOff = location
      
     def detectBlocksAround(self, state:State):
         result = []
