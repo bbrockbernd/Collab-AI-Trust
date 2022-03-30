@@ -22,8 +22,8 @@ class Phase(enum.Enum):
     GRAB_BLOCK = 8,
     PLAN_TO_DROP_ZONE = 9,
     FOLLOW_PATH_TO_DROP_ZONE = 10,
-    DROP_BLOCK_AT_COLLECTION_POINT = 11
-    DROP_BLOCK_WEST_OF_COLLECTION_POINT = 12
+    PLAN_PATH_TO_VERIFY_COLLECTION = 11,
+    FOLLOW_PATH_TO_VERIFY_COLLECTION = 12
 
 
 class Liar(BW4TBrain):
@@ -86,7 +86,7 @@ class Liar(BW4TBrain):
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
                 if len(self.roomsToExplore)>0:
                     self._planPathToUnsearchedRoom() 
-                    self._sendMovingToDoorMessage(state, self._door)
+                    self._sendMovingToDoorMessage(state, self._door['room_name'])
                     self._phase=Phase.FOLLOW_PATH_TO_UNSEARCHED_ROOM
                 else:
                     self._phase=Phase.PLAN_TO_GOAL_BLOCK
@@ -174,27 +174,26 @@ class Liar(BW4TBrain):
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
                     return action, {}   
-                self._phase=Phase.DROP_BLOCK_AT_COLLECTION_POINT
+                self._phase=Phase.PLAN_PATH_TO_VERIFY_COLLECTION
+                self.processDropGoalBlockAtCollectPoint(state)
+                self.msgAboutDropLocation(state)
+                return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }    
+            
+            if Phase.PLAN_PATH_TO_VERIFY_COLLECTION==self._phase:
+                self._navigator.reset_full()
+                locations = []
+                for collectBlock in self.collectBlocks.values():                 
+                    locations.append(collectBlock['location'])
+                self._navigator.add_waypoints(locations)
+                self._phase=Phase.FOLLOW_PATH_TO_VERIFY_COLLECTION
                 
-            if Phase.DROP_BLOCK_AT_COLLECTION_POINT==self._phase:
-                if not self.checkGoalBlockPresent(state):
-                    self.dropGoalBlockAtCollectPoint(state)
-                    self.msgAboutDropLocation(state) 
-                    return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }            
-                else: 
-                    for collectBlock in self.collectBlocks.values():
-                        if collectBlock['location'] == state[self.agent_id]['location']:    
-                            self.collectBlocks[collectBlock['obj_id']]['is_delivered_confirmed'] = True
-                    self._phase=Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT
-                    self.msgAboutDropLocation(state) 
-                    return "MoveWest", {}
-                
-            if Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT==self._phase:
+            if Phase.FOLLOW_PATH_TO_VERIFY_COLLECTION==self._phase:
+                self.updateBlocks(state)
+                self._state_tracker.update(state)
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action!=None:
+                    return action, {}   
                 self._phase=Phase.PLAN_TO_GOAL_BLOCK
-                carriedBlockId = self.agent_properties['is_carrying'][0]['obj_id']
-                self.knownBlocks[carriedBlockId]['is_delivered_by_me'] = True
-                self.knownBlocks[carriedBlockId]['is_delivered'] = True
-                return "DropObject", {'object_id':carriedBlockId}  
     
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
@@ -360,11 +359,8 @@ class Liar(BW4TBrain):
                 return True
         return False
     
-    def dropGoalBlockAtCollectPoint(self, state:State):
+    def processDropGoalBlockAtCollectPoint(self, state:State):
         carriedBlock = self.agent_properties['is_carrying'][0]
-
-        self._phase=Phase.PLAN_TO_GOAL_BLOCK
-    
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered'] = True
         for key in self.collectBlocks.keys():
