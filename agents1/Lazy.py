@@ -1,4 +1,4 @@
-from typing import final, List, Dict, Final
+from typing import List, Dict
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
