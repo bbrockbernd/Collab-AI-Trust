@@ -116,7 +116,7 @@ class Liar(BW4TBrain):
                 self.sendExploringMessage(state)
                 
             if Phase.EXPLORE_ROOM==self._phase:
-                self.detectNewBlocks(state)
+                self.updateBlocks(state)
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
@@ -194,9 +194,8 @@ class Liar(BW4TBrain):
         self._navigator.reset_full()
         collectBlock = None
         for _collectBlock in self.collectBlocks.values():
-            if not _collectBlock['is_delivered_by_me'] and len(_collectBlock['drop_actions']) == 0 and not _collectBlock['is_delivered_confirmed']:
+            if not _collectBlock['is_delivered_by_me'] and not _collectBlock['is_delivered_confirmed']:
                 collectBlock = _collectBlock
-                break
 
         if collectBlock is None:
             return False
@@ -206,7 +205,6 @@ class Liar(BW4TBrain):
             if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                 self.blockToGrab = block
                 break
-        
         self._navigator.add_waypoints([self.blockToGrab['location']])
         
               
@@ -294,10 +292,10 @@ class Liar(BW4TBrain):
                             + ', "colour": ' + str(block['visualization']['colour'])
                             + '} at location ' + str(self.blockToGrab['location']), state[self.agent_id]['obj_id'])           
                 
-    def updatBlock(self, block):
+    def updateBlock(self, block):
         obj_id = block['obj_id']
         if obj_id in self.knownBlocks.keys():
-            self.knownBlocks[obj_id]['location'] = block['obj_id']['location']
+            self.knownBlocks[obj_id]['location'] = block['location']
             for collectBlock in self.collectBlocks.values():
                 if self.sameVizuals(block, collectBlock):
                     if block['location'] == collectBlock['location']:
@@ -311,7 +309,7 @@ class Liar(BW4TBrain):
     def updateBlocks(self, state:State):
         for block in self.detectBlocksAround(state):
             self.addNewBlock(state, block)
-            self.updatBlock(block)
+            self.updateBlock(block)
                                
     
     
