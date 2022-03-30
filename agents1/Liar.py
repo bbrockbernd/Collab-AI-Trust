@@ -47,9 +47,6 @@ class Liar(BW4TBrain):
         # Known data since we have seen it
         self.knownBlocks = {}
         
-        # self.knownGoalBlocks = []
-        self.knownGoalBlocks = {}
-        
         # The blocks we need to collect
         self.collectBlocks = {}
         
@@ -89,7 +86,6 @@ class Liar(BW4TBrain):
                 
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
                 if len(self.roomsToExplore)>0:
-                    print('hi')
                     self._planPathToUnsearchedRoom() 
                     self._sendMovingToDoorMessage(state, self._door)
                     self._phase=Phase.FOLLOW_PATH_TO_UNSEARCHED_ROOM
@@ -177,8 +173,8 @@ class Liar(BW4TBrain):
             if Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT==self._phase:
                 self._phase=Phase.PLAN_TO_GOAL_BLOCK
                 carriedBlockId = self.agent_properties['is_carrying'][0]['obj_id']
-                self.knownGoalBlocks[carriedBlockId]['is_delivered_by_me'] = True
-                self.knownGoalBlocks[carriedBlockId]['is_delivered'] = True
+                self.knownBlocks[carriedBlockId]['is_delivered_by_me'] = True
+                self.knownBlocks[carriedBlockId]['is_delivered'] = True
                 return "DropObject", {'object_id':carriedBlockId}  
     
     def _planPathToUnsearchedRoom(self):
@@ -203,9 +199,9 @@ class Liar(BW4TBrain):
         if collectBlock is None:
             return False
             
-        for block_id in self.knownGoalBlocks:
-            block = self.knownGoalBlocks[block_id]
-            if self.knownGoalBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
+        for block_id in self.knownBlocks:
+            block = self.knownBlocks[block_id]
+            if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                 self.blockToGrab = block
                 break
         
@@ -232,15 +228,14 @@ class Liar(BW4TBrain):
     def addNewBlock(self, state:State, block):
         obj_id = block['obj_id']
         if obj_id not in self.knownBlocks.keys():
-            self.knownBlocks[obj_id] = state[block]
+            self.knownBlocks[obj_id] = block
+            self.knownBlocks[obj_id]["isGoalBlock"] = False
             for collectBlock in self.collectBlocks.values():
                 if self.sameVizuals(collectBlock, block):
-                    
-                    self.knownGoalBlocks[obj_id] = state[obj_id]
-                    self.knownGoalBlocks[obj_id]['is_delivered'] = False
-                    self.knownGoalBlocks[obj_id]['is_delivered_confirmed'] = False
-                    self.knownGoalBlocks[obj_id]['is_delivered_by_me'] = False
-                    
+                    self.knownBlocks[obj_id]["isGoalBlock"] = True
+                    self.knownBlocks[obj_id]['is_delivered'] = False
+                    self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
+                    self.knownBlocks[obj_id]['is_delivered_by_me'] = False                    
                     self.sendGoalBlockFoundMessage(state, collectBlock)
                 
                 
@@ -286,9 +281,9 @@ class Liar(BW4TBrain):
         lie = self.toLieOrNotToLieZetsTheKwestion()
         block = self.blockToGrab
         location = self.blockToGrab['location']
-        if lie and len(self.knownGoalBlocks) > 1:
-            block = random.choice([block for block_id in self.knownGoalBlocks
-            if not self.sameVizuals(self.knownGoalBlocks[block_id], self.blockToGrab)])
+        if lie and len(self.knownBlocks) > 1:
+            block = random.choice([block for block_id in self.knownBlocks
+            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)])
         elif lie:
             location = (math.ceil(random.random() * location[0]), math.ceil(random.random() * location[1])) ## SHOULD BE IMPROVED
             
@@ -299,12 +294,12 @@ class Liar(BW4TBrain):
                 
     def updateGoalBlock(self, block):
         obj_id = block['obj_id']
-        if obj_id in self.knownGoalBlocks.keys():
+        if obj_id in self.knownBlocks.keys():
             for collectBlock in self.collectBlocks.values():
                 if self.sameVizuals(block, collectBlock):
                     if block['location'] == collectBlock['location']:
-                        self.knownGoalBlocks[obj_id]['is_delivered'] = True
-                        self.knownGoalBlocks[obj_id]['is_delivered_confirmed'] = True
+                        self.knownBlocks[obj_id]['is_delivered'] = True
+                        self.knownBlocks[obj_id]['is_delivered_confirmed'] = True
                                                     
             
     '''
@@ -346,8 +341,8 @@ class Liar(BW4TBrain):
 
         self._phase=Phase.PLAN_TO_GOAL_BLOCK
     
-        self.knownGoalBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
-        self.knownGoalBlocks[carriedBlock['obj_id']]['is_delivered'] = True
+        self.knownBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
+        self.knownBlocks[carriedBlock['obj_id']]['is_delivered'] = True
         for key in self.collectBlocks.keys():
             if self.collectBlocks[key]['location'] == state[self.agent_id]['location']:
                 self.collectBlocks[key]['is_delivered_by_me'] = True
