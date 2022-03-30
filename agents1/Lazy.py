@@ -1,3 +1,4 @@
+import ast
 from typing import List, Dict
 import enum, random
 from bw4t.BW4TBrain import BW4TBrain
@@ -51,6 +52,7 @@ class MyBlock:
         self.obj_id = block_obj['obj_id']
         self.visualization = block_obj['visualization']
 
+
     def set_drop_point(self, dp: MyDropPoint):
         self.dropPoint = dp
 
@@ -100,6 +102,14 @@ class MyWorld:
                 block.isGoal = True
                 dp.goals.append(block)
 
+    def removeBlock(self, block: MyBlock):
+        del self.blocks[block.obj_id]
+        self.getRoom(block.room).blocks.remove(block)
+
+        for dp in self.dropPoints:
+            if dp.myid == block.myid:
+                dp.goals.remove(block)
+
 
     def getGoals(self) -> [MyBlock]:
         for dp in self.dropPoints:
@@ -135,7 +145,8 @@ class Lazy(BW4TBrain):
         self._location = (0, 0)
         self._current_door_id = ""
         self._inventory = None
-        self._agent_id = ""
+        self._checked_locations = []
+        self._droppoint = None
 
         self._quitting = False
         self._counter = 0
@@ -168,21 +179,25 @@ class Lazy(BW4TBrain):
 
     def what_am_i_doing(self):
         self._counter += 1
+
+        if self._mode == Mode.GOAL and self._inventory is not None:
+            if self._inventory.dropPoint.completed:
+                self._phase = Phase.DROP
+
         if self._mode is Mode.GOAL:
             return
 
         if len(self._world.getGoals()) > 0 and self._phase is not Phase.EXPLORE_ROOM:
-            self._sendMessage('Quitting current task', self._agent_id)
+            self._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
         if self._counter > 7 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
-            self._sendMessage('Quitting current task', self._agent_id)
+            self._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
 
     def init_vars(self) -> (str, {}):
         state = self._current_state
-        self._agent_id = state
         for room in state.get_all_room_names():
             if 'room' not in room:
                 continue
@@ -212,7 +227,7 @@ class Lazy(BW4TBrain):
             self._destination = room.doorLoc
             self._destination = (self._destination[0], self._destination[1] + 1)
             self._dest_id = room.name
-            self._sendMessage(f'Moving to {room.name}', self._agent_id)
+            self._sendMessage(f'Moving to {room.name}', self.agent_id)
 
             self._quitting = random.choice([True, False])
 
@@ -247,13 +262,19 @@ class Lazy(BW4TBrain):
             return self.next(Phase.DROP)
 
     def pickup_block(self) -> (str, {}):
+
         block = self._world.blocks[self._dest_id]
+        if block.obj_id not in self._current_state.keys():
+            self._world.removeBlock(block)
+            return self.next(Phase.WHAT_TO_DO)
+
+
         self._dest_id = block.dropPoint.obj_id
         self._destination = block.dropPoint.location
         self._phase = Phase.CALCULATING
         self._inventory = block
 
-        self._sendMessage(f'Picking up goal block {block.visualization} at location {block.location}', self._agent_id)
+        self._sendMessage(f'Picking up goal block {block.visualization} at location {block.location}', self.agent_id)
         return GrabObject.__name__, {'object_id': block.obj_id}
 
     def drop_block(self) -> (str, {}):
@@ -263,13 +284,13 @@ class Lazy(BW4TBrain):
         block.dropPoint.completed = True
         self._phase = Phase.WHAT_TO_DO
 
-        self._sendMessage(f'Dropped goal block {block.visualization} at drop location {self._destination}', self._agent_id)
+        self._sendMessage(f'Dropped goal block {block.visualization} at drop location {self._location}', self.agent_id)
         return DropObject.__name__, {'object_id': block.obj_id}
 
     def open_door(self) -> (str, {}):
         self._phase = Phase.MOVING
 
-        self._sendMessage(f"Opening door of {self._current_door_id.split('_')[0]}_{self._current_door_id.split('_')[1]}", self._agent_id)
+        self._sendMessage(f"Opening door of {self._current_door_id.split('_')[0]}_{self._current_door_id.split('_')[1]}", self.agent_id)
         return OpenDoorAction.__name__, {'object_id': self._current_door_id}
 
     def plan_room_explore(self) -> (str, {}):
@@ -279,17 +300,21 @@ class Lazy(BW4TBrain):
         self._navigator.reset_full()
         self._navigator.add_waypoints(roomSquares)
 
-        self._sendMessage(f"Searching through {self._dest_id}", self._agent_id)
+        self._sendMessage(f"Searching through {self._dest_id}", self.agent_id)
         return self.next(Phase.EXPLORE_ROOM)
 
-    def explore_room(self) -> (str, {}):
+    def check_surroundings(self):
         for key in self._current_state.keys():
             if 'Block_in' in key and key not in self._world.blocks:
                 block_obj = self._current_state[key]
                 block = MyBlock(block_obj, self._dest_id)
                 self._world.addBlock(block)
                 if block.isGoal:
-                    self._sendMessage(f'Found goal block {block.visualization} at location {block.location}', self._agent_id)
+                    self._sendMessage(f'Found goal block {block.visualization} at location {block.location}', self.agent_id)
+
+    def explore_room(self) -> (str, {}):
+        self.check_surroundings()
+        self._checked_locations.append(self._location)
 
         self._state_tracker.update(self._current_state)
         action = self._navigator.get_move_action(self._state_tracker)
@@ -327,9 +352,37 @@ class Lazy(BW4TBrain):
                 door = state.get_room_doors(room)[0]
                 self._world.getRoom(room).doorOpen = door['is_open']
 
+        for agent in receivedMessages.keys():
+            for msg in receivedMessages[agent]:
+                message = msg.split()
+                if len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
+                    visualization_string = "{" + msg.split('{')[1].split('}')[0] + "}"
+                    visualization = ast.literal_eval(visualization_string)
+
+                    location_string = "(" + msg.split('(')[1].split(')')[0] + ")"
+                    location = ast.literal_eval(location_string)
+
+                    for dp in self._world.dropPoints:
+                        if dp.shape == visualization['shape'] and dp.color == visualization['colour'] and not dp.completed and dp.location == location:
+                            dp.completed = True
+                            break
+                        if not dp.completed:
+                            break
+
+
+
+
         self.what_am_i_doing()
 
         return self.next(self._phase)
+
+    def validateBlock(self, location: (int, int), color: str, shape: int) -> int:
+        if location not in self._checked_locations:
+            return 0
+        for block in self._world.blocks.values():
+            if block.location == location and block.color == color and block.shape == shape:
+                return 1
+        return -1
 
     def _sendMessage(self, mssg, sender):
         '''
@@ -350,6 +403,7 @@ class Lazy(BW4TBrain):
             for member in teamMembers:
                 if mssg.from_id == member:
                     receivedMessages[member].append(mssg.content)
+        self.received_messages = []
         return receivedMessages
 
     def _trustBlief(self, member, received):
