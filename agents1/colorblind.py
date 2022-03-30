@@ -1,6 +1,7 @@
 
 from typing import Dict
-import enum, random
+import enum
+
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
@@ -22,8 +23,8 @@ class Phase(enum.Enum):
     GRAB_BLOCK = 8,
     PLAN_TO_DROP_ZONE = 9,
     FOLLOW_PATH_TO_DROP_ZONE = 10,
-    DROP_BLOCK_AT_COLLECTION_POINT = 11
-    DROP_BLOCK_WEST_OF_COLLECTION_POINT = 12
+    PLAN_PATH_TO_VERIFY_COLLECTION = 11,
+    FOLLOW_PATH_TO_VERIFY_COLLECTION = 12
 
 
 class Colorblind(BW4TBrain):
@@ -86,7 +87,7 @@ class Colorblind(BW4TBrain):
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
                 if len(self.roomsToExplore)>0:
                     self._planPathToUnsearchedRoom() 
-                    self._sendMovingToDoorMessage(state, self._door)
+                    self._sendMovingToDoorMessage(state, self._door['room_name'])
                     self._phase=Phase.FOLLOW_PATH_TO_UNSEARCHED_ROOM
                 else:
                     self._phase=Phase.PLAN_TO_GOAL_BLOCK
@@ -123,13 +124,12 @@ class Colorblind(BW4TBrain):
                 self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
             
             if Phase.PLAN_TO_GOAL_BLOCK==self._phase:
-                possible = self._planPathToGoalBlock()
+                possible = self._possibleToPlanPathToGoalBlock()
                 if possible == False:
                     return None, {}
                 
                 roomOfBlock = self.blockToGrab['name'].split(' ')[-1]
                 self._sendMovingToDoorMessage(state, roomOfBlock)
-
                 self._phase=Phase.FOLLOW_PATH_TO_GOAL_BLOCK
             
             if Phase.FOLLOW_PATH_TO_GOAL_BLOCK==self._phase:
@@ -164,7 +164,6 @@ class Colorblind(BW4TBrain):
                     self._phase = Phase.PLAN_TO_GOAL_BLOCK
                     continue
                 
-                
                 self._planPathToDropOff()
                 self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
             
@@ -174,27 +173,26 @@ class Colorblind(BW4TBrain):
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
                     return action, {}   
-                self._phase=Phase.DROP_BLOCK_AT_COLLECTION_POINT
+                self._phase=Phase.PLAN_PATH_TO_VERIFY_COLLECTION
+                self.processDropGoalBlockAtCollectPoint(state)
+                self.msgAboutDropLocation(state)
+                return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }    
+            
+            if Phase.PLAN_PATH_TO_VERIFY_COLLECTION==self._phase:
+                self._navigator.reset_full()
+                locations = []
+                for collectBlock in self.collectBlocks.values():                 
+                    locations.append(collectBlock['location'])
+                self._navigator.add_waypoints(locations)
+                self._phase=Phase.FOLLOW_PATH_TO_VERIFY_COLLECTION
                 
-            if Phase.DROP_BLOCK_AT_COLLECTION_POINT==self._phase:
-                if not self.checkGoalBlockPresent(state):
-                    self.dropGoalBlockAtCollectPoint(state)
-                    self.msgAboutDropLocation(state) 
-                    return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }            
-                else: 
-                    for collectBlock in self.collectBlocks.values():
-                        if collectBlock['location'] == state[self.agent_id]['location']:    
-                            self.collectBlocks[collectBlock['obj_id']]['is_delivered_confirmed'] = True
-                    self._phase=Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT
-                    self.msgAboutDropLocation(state) 
-                    return "MoveWest", {}
-                
-            if Phase.DROP_BLOCK_WEST_OF_COLLECTION_POINT==self._phase:
-                self._phase=Phase.PLAN_TO_GOAL_BLOCK
-                carriedBlockId = self.agent_properties['is_carrying'][0]['obj_id']
-                self.knownBlocks[carriedBlockId]['is_delivered_by_me'] = True
-                self.knownBlocks[carriedBlockId]['is_delivered'] = True
-                return "DropObject", {'object_id':carriedBlockId}  
+            if Phase.FOLLOW_PATH_TO_VERIFY_COLLECTION==self._phase:
+                self.updateBlocks(state)
+                self._state_tracker.update(state)
+                action = self._navigator.get_move_action(self._state_tracker)
+                if action!=None:
+                    return action, {}   
+                self._phase=Phase.PLAN_TO_GOAL_BLOCK 
     
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
@@ -209,7 +207,7 @@ class Colorblind(BW4TBrain):
         
     def getBlockToGrab(self):
         for _collectBlock in self.collectBlocks.values():
-            if not _collectBlock['is_delivered_by_me'] and not _collectBlock['is_delivered_confirmed']:
+            if not _collectBlock['is_delivered_by_me'] or not _collectBlock['is_delivered_confirmed']:
                 collectBlock = _collectBlock
                 
                 if collectBlock is None:
@@ -218,29 +216,35 @@ class Colorblind(BW4TBrain):
                 for block_id in self.knownBlocks:
                     block = self.knownBlocks[block_id]
                     if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
-                        self.blockToGrab = block
-                        return block
+                        return block    
+        return None
                     
-    def _planPathToGoalBlock(self):
+    def _possibleToPlanPathToGoalBlock(self):
         self._navigator.reset_full()
-        collectBlock = self.getBlockToGrab()
-        if collectBlock is None:
-            return None, {}
+        self.blockToGrab = self.getBlockToGrab() #MAYBY MOVE SETTING
+        if self.blockToGrab is None:
+            return False
         self._navigator.add_waypoints([self.blockToGrab['location']])
+        return True
+    
+    def _getTargetLocation(self, block):
+        location = (-1, -1)
+        ids = list(self.collectBlocks.keys())
+        ids.sort()
+        
+        for name in ids:            
+            if self.sameVizuals(self.collectBlocks[name], block):
+                location = self.collectBlocks[name]["location"]
+                break
+        
+        location = (location[0]-1, location[1])
+        return location
         
               
     def _planPathToDropOff(self):
         self._navigator.reset_full()
         carriedBlock = self.agent_properties['is_carrying'][0]
-        location = (0, 0)
-        ids = list(self.collectBlocks.keys())
-        ids.sort()
-        
-        for name in ids:            
-            if (self.sameVizuals(self.collectBlocks[name], carriedBlock)): 
-                loc = self.collectBlocks[name]["location"]
-                if loc[1] > location[1]:
-                    location = loc
+        location = self._getTargetLocation(carriedBlock)
         self._navigator.add_waypoints([location])
         self.locationToDropOff = location 
      
@@ -262,7 +266,8 @@ class Colorblind(BW4TBrain):
                     self.knownBlocks[obj_id]['is_delivered'] = False
                     self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
                     self.knownBlocks[obj_id]['is_delivered_by_me'] = False                    
-                    self.sendGoalBlockFoundMessage(state, collectBlock)
+            if self.knownBlocks[obj_id]["isGoalBlock"]:
+                self.sendGoalBlockFoundMessage(state, block)
                 
                 
     '''
@@ -303,11 +308,21 @@ class Colorblind(BW4TBrain):
         obj_id = block['obj_id']
         if obj_id in self.knownBlocks.keys():
             self.knownBlocks[obj_id]['location'] = block['location']
+            
+            #It is placed where we want it
+            if self._getTargetLocation(self.knownBlocks[obj_id]) == self.knownBlocks[obj_id]['location']:
+                self.knownBlocks[obj_id]['is_delivered'] = True
+                self.knownBlocks[obj_id]['is_delivered_confirmed'] = True
+                return
+                
+            #it is placed on a dropzone we asume it is valid
             for collectBlock in self.collectBlocks.values():
                 if self.sameVizuals(block, collectBlock):
                     if block['location'] == collectBlock['location']:
                         self.knownBlocks[obj_id]['is_delivered'] = True
                         self.knownBlocks[obj_id]['is_delivered_confirmed'] = True
+                        return
+
                                                     
             
     '''
@@ -336,17 +351,14 @@ class Colorblind(BW4TBrain):
                 return True
         return False
     
-    def dropGoalBlockAtCollectPoint(self, state:State):
+    def processDropGoalBlockAtCollectPoint(self, state:State):
         carriedBlock = self.agent_properties['is_carrying'][0]
-
-        self._phase=Phase.PLAN_TO_GOAL_BLOCK
-    
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered'] = True
         for key in self.collectBlocks.keys():
             if self.collectBlocks[key]['location'] == state[self.agent_id]['location']:
-                self.collectBlocks[key]['is_delivered_by_me'] = True
-                self.collectBlocks[key]['is_delivered_confirmed'] = True
+                # self.collectBlocks[key]['is_delivered_by_me'] = True
+                # self.collectBlocks[key]['is_delivered_confirmed'] = True
                 break   
       
     def sameVizuals(self, block1, block2):
