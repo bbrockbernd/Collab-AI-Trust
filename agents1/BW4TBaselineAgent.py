@@ -114,10 +114,7 @@ class BaseLineAgent(BW4TBrain):
         for room in rooms:
             objects = state.get_room_objects(room)
             for obj in objects:
-                print(location)
-                (x, y) = location
-                print(obj, (x,y))
-                if obj['location'] == (x,y):
+                if obj['location'] == location:
                     return room
         raise Exception
 
