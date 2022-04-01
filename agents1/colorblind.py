@@ -301,7 +301,7 @@ class Colorblind(BaseLineAgent):
     def sendGoalBlockFoundMessage(self, state:State, block):
         messageBlock = state[block['obj_id']] 
         location = str(state[block['obj_id']]['location'])
-        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  None}) + " at location " + location
+        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  "?"}) + " at location " + location
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])
     
     def _sendGrabBlockMessage(self, state:State):
