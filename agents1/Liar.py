@@ -130,11 +130,11 @@ class Liar(BaseLineAgent):
                 self.updateBlocks(state)
                 possible = self._possibleToPlanPathToGoalBlock()
                 if possible == False:
+                    self._phase=Phase.PLAN_PATH_TO_VERIFY_COLLECTION
                     return None, {}
                 
                 roomOfBlock = self.blockToGrab['name'].split(' ')[-1]
                 self._sendMovingToDoorMessage(state, roomOfBlock)
-
                 self._phase=Phase.FOLLOW_PATH_TO_GOAL_BLOCK
             
             if Phase.FOLLOW_PATH_TO_GOAL_BLOCK==self._phase:
@@ -314,7 +314,7 @@ class Liar(BaseLineAgent):
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
         # Randomly pick a closed door
-        self._door = random.choice(self.roomsToExplore)
+        self._door = self.roomsToExplore[-1]
         self.roomsToExplore.remove(self._door)
         doorLoc = self._door['location']
         # Location in front of door is south from door
@@ -329,10 +329,11 @@ class Liar(BaseLineAgent):
                 
                 if collectBlock is None:
                     return None
-        
-                for block_id in self.knownBlocks:
-                    block = self.knownBlocks[block_id]
-                    if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
+                ids = list(self.knownBlocks.keys())
+                ids.sort(reverse=True)
+                for id in ids:
+                    block = self.knownBlocks[id]
+                    if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                         self.blockToGrab = block
                         return block
                 return None
@@ -428,7 +429,8 @@ class Liar(BaseLineAgent):
         lie = self.toLieOrNotToLieZetsTheKwestion()
         block = self.blockToGrab
         location = self.blockToGrab['location']
-        if lie and len(self.knownBlocks) > 1:
+        if lie and len(self.knownBlocks) > 1 and len([block for block_id in self.knownBlocks
+            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)]) > 0:
             block = random.choice([block for block_id in self.knownBlocks
             if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)])
         elif lie:
@@ -445,7 +447,10 @@ class Liar(BaseLineAgent):
         block = carriedBlock
         
         if lie: 
-            if len(self.collectBlocks) > 0:
+            if len(self.collectBlocks) > 0 and len([block for block in self.collectBlocks.values()
+                    if  (block['visualization']['shape']  is not carriedBlock['visualization']['shape']) or
+                        (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
+                        (block['visualization']['size']   is not carriedBlock['visualization']['size'])]) > 0:
                 block = random.choice([block for block in self.collectBlocks.values()
                     if  (block['visualization']['shape']  is not carriedBlock['visualization']['shape']) or
                         (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
@@ -534,7 +539,7 @@ class Liar(BaseLineAgent):
                 waypoints.append((door['location']))
         self._navigator.add_waypoints(waypoints)
     
-    def _validateBlock(self, location, color: str, shape: int):
+    def _validateBlock(self, location, color: str, shape: int): 
         possible_blocks = []
         for block in self.knownBlocks.values():
             if (block['location'] == location):
@@ -552,11 +557,10 @@ class Liar(BaseLineAgent):
             if 'area' in roomTile['name']:
                 if endX is None or roomTile['location'][0] > endX:
                     endX = roomTile['location'][0]
-                if endY is None or roomTile['location'][0] > endY:
+                if endY is None or roomTile['location'][1] > endY:
                     endY = roomTile['location'][1]
                 if startX is None or roomTile['location'][0] < startX:
                     startX = roomTile['location'][0]
-                if startY is None or roomTile['location'][0] < startY:
+                if startY is None or roomTile['location'][1] < startY:
                     startY = roomTile['location'][1]
         return [(startX, startY), (endX, endY)]
-        
