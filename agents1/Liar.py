@@ -282,13 +282,6 @@ class Liar(BaseLineAgent):
                     if collectBlock['location'] == (x,y) and collectBlock['is_delivered_confirmed']:
                         return "MoveNorth", {}
                 self._phase = Phase.PLAN_TO_GOAL_BLOCK 
-                    
-
-
-
-                
-                
-            
                 
                     
     def checkAllCollectBlocksPresent(self):
@@ -459,7 +452,7 @@ class Liar(BaseLineAgent):
                         (block['visualization']['size']   is not carriedBlock['visualization']['size'])])
         msg = "Dropped goal block " + str({"size":  block['visualization']['size'] 
                                                         , "shape": block['visualization']['shape']
-                                                        , "colour": block['visualization']['colour']}) + "at drop location " + str(location)        
+                                                        , "colour": block['visualization']['colour']}) + " at drop location " + str(location)        
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])      
                 
     def updateBlocks(self, block):
