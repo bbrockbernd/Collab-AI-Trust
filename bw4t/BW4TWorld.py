@@ -39,7 +39,7 @@ def createwordsettings ():
     'room_size' : (6,4),  # width, height
     'nr_rooms' : np.random.randint(3, 40), # total number of rooms.
     'rooms_per_row': np.random.randint(3,10), #number of rooms per row.
-    'average_blocks_per_room': 1,
+    'average_blocks_per_room': 3,
     'block_shapes': [0, 1, 2], # possible shapes of the blocks
     'block_colors': ['#0008ff', '#ff1500', '#0dff00'], #possible colors of blocks
     'room_colors': ['#0008ff', '#ff1500', '#0dff00'],
