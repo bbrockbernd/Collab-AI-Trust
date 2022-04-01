@@ -68,7 +68,6 @@ class Liar(BaseLineAgent):
         # Process messages from team members
         receivedMessages = super()._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        print(receivedMessages)
         super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         

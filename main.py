@@ -24,6 +24,5 @@ for i in range(1,100):
       wordsetttings = createwordsettings()
       wordsetttings['tick_duration'] = 0.00000001 #set lower for faster speed, default seems 0.1
       world=BW4TWorld(agents, worldsettings=wordsetttings).run()
-      wordsetttings = None
       print("DONE!")
       print(Statistics(world.getLogger().getFileName()))

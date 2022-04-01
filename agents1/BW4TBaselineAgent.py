@@ -1,4 +1,5 @@
 import csv
+import json
 import os
 from collections import Counter
 from typing import final, List, Dict, Final
@@ -31,7 +32,9 @@ class BaseLineAgent(BW4TBrain):
         super().__init__(settings)
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
-        self._log = {}
+        self._log = {}  # Memory of recent actions by other agents
+        self._actionHistory = {MessageType.PICKING_UP : [], MessageType.DROPPED : []}  # History of Dropped and Picked Up blocks
+        self._trustBeliefs = {}  # Trust Beliefs
 
     def initialize(self):
         super().initialize()
@@ -116,7 +119,7 @@ class BaseLineAgent(BW4TBrain):
             for obj in objects:
                 if obj['location'] == location:
                     return room
-        raise Exception
+        return ''
 
     '''
     Compute the trust belief value based on trust and reputation
@@ -127,6 +130,32 @@ class BaseLineAgent(BW4TBrain):
         for [agent, trust, rep] in agents:
             trust_beliefs[agent] = (2 * float(trust) + float(rep)) / 3
         return trust_beliefs
+
+    '''
+    Returns True if an agent can be trusted
+    '''
+    def _trustInAgent(self, agent_id: str) -> bool:
+        if self._trustBeliefs[agent_id] < 0:
+            return False
+        else:
+            return True
+
+    '''
+    Has to be overwritten by child classes
+    '''
+    def _validateBlock(self, location: (int, int), color: str, shape: int) -> int:
+        return 0
+
+    '''
+    Returns the history of data received from PICKING_UP and DROPPED messages
+    '''
+    def _blockActions(self, action: MessageType) -> List[List]:
+        if action == MessageType.DROPPED:
+            return self._actionHistory[MessageType.DROPPED]
+        elif action == MessageType.PICKING_UP:
+            return self._actionHistory[MessageType.PICKING_UP]
+        else:
+            return []
 
     '''
     Transform text ending with "location (x, y)" to a tupple (x,y)
@@ -148,6 +177,7 @@ class BaseLineAgent(BW4TBrain):
         Picking up goal block [block_visualization] at location [location]
         Dropped goal block [block_visualization] at drop location [location]
         """
+        received = received.replace('T', 't').replace('F', 'f')
         message = received.split()
         if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
             return MessageType.MOVING, message[2]
@@ -156,13 +186,13 @@ class BaseLineAgent(BW4TBrain):
         elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
             return MessageType.SEARCHING, message[2]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
-            return MessageType.FOUND, [received[received.find('{')+1:received.find('}')],
+            return MessageType.FOUND, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
-            return MessageType.DROPPED, [received[received.find('{')+1:received.find('}')],
+            return MessageType.DROPPED, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
         elif len(message) > 3 and ' '.join(message[:4]) == 'Picking up goal block':
-            return MessageType.PICKING_UP, [received[received.find('{')+1:received.find('}')],
+            return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
         else:
             return MessageType.INVALID, []
@@ -186,7 +216,7 @@ class BaseLineAgent(BW4TBrain):
         truth = 0.1
         lie = 0.5
         filename = name + '_memory.csv'
-        params = ['Agent', 'Trust', 'Reputation']
+        params = ['Agent', 'Direct Trust', 'Reputation']
         agents = []
         try:
             with open(filename, 'r') as mem_file:
@@ -237,10 +267,26 @@ class BaseLineAgent(BW4TBrain):
                             else:
                                 agents[member_index][1] -= lie
 
+                            # Trust: Check if FOUND block by other matches what you know
+                            block_confirmation = self._validateBlock(message_data[1],
+                                                                     message_data[0]['colour'],
+                                                                     message_data[0]['shape'])
+                            # tod: add broadcast
+                            if block_confirmation == 1:
+                                agents[member_index][1] += truth
+                            elif block_confirmation == -1:
+                                agents[member_index][1] -= lie
+
                         # Check if message is of type PICKING_UP or DROPPED and already has data (max 2)
                         elif message_type == MessageType.PICKING_UP or message_type == MessageType.DROPPED:
 
-                            # Store message
+                            # Store data in history of actions List[List[str, tuple[int, int], str]]
+                            history = self._actionHistory[message_type]
+                            data = [message_data[0], message_data[1], member]
+                            history.append(data)
+                            self._actionHistory[message_type] = history
+
+                            # Store message in log
                             if type_already_exists:
                                 if len(self._log[member][message_type]) > 1:  # Strong can pick up 2
                                     self._log[member][message_type] = [message_data]
@@ -278,7 +324,7 @@ class BaseLineAgent(BW4TBrain):
                                                    if 'class_inheritance' in door and 'Door' in door[
                                                    'class_inheritance'] and door['is_open']]
                                 if message_data in open_doors_room:
-                                    agents[member_index][1] += truth  # Reevaluate if adding truth value here is useful
+                                    agents[member_index][1] += truth
                                 else:
                                     agents[member_index][1] -= lie
 
