@@ -2,14 +2,10 @@
 from typing import Dict
 import enum, random
 from agents1.BW4TBaselineAgent import BaseLineAgent
-from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
-from matrx.messages.message import Message
 
-import numpy as np
-import math
 
 class Phase(enum.Enum):
     SET_UP_VARIABLES = 0,
