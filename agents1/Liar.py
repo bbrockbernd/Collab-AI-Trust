@@ -544,9 +544,11 @@ class Liar(BaseLineAgent):
         for block in self.knownBlocks.values():
             if (block['location'] == location):
                 possible_blocks.append(block)
-                if (block['visualization']['colour'] == color and 
+                if color is "?" and block['visualization']['shape'] == shape: 
+                    return 1
+                elif (block['visualization']['colour'] == color and 
                     block['visualization']['shape'] == shape):
-                        return 1
+                    return 1
         if len(possible_blocks) == 0:
             return 0
         return -1
