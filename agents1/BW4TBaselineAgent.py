@@ -119,7 +119,7 @@ class BaseLineAgent(BW4TBrain):
             for obj in objects:
                 if obj['location'] == location:
                     return room
-        raise Exception
+        return ''
 
     '''
     Compute the trust belief value based on trust and reputation
