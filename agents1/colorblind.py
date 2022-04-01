@@ -279,7 +279,10 @@ class Colorblind(BW4TBrain):
     
     def sendExploringMessage(self, state:State):
         msg = self._door['room_name']
-        self._sendMessage("Searching through "  + str(msg), state[self.agent_id]['obj_id']) 
+        if type(msg) == str:
+            self._sendMessage("Searching through "  + msg, state[self.agent_id]['obj_id'])
+        else:
+            self._sendMessage("Searching through "  + msg["door_name"], state[self.agent_id]['obj_id']) 
         
     def _sendMovingToDoorMessage(self, state:State, correctDoor):       
         msg = correctDoor
@@ -342,7 +345,7 @@ class Colorblind(BW4TBrain):
         
         self._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
                             + ', "shape": ' + str(block['visualization']['shape'])
-                            + ', "colour": ' + "?"
+                            + ', "colour": ' + "'?'"
                             + '} at drop location ' + str(location), state[self.agent_id]['obj_id'])
             
     def checkGoalBlockPresent(self, state:State):

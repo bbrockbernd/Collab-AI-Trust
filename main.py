@@ -2,6 +2,7 @@ from bw4t.BW4TWorld import DEFAULT_WORLDSETTINGS, BW4TWorld
 from bw4t.statistics import Statistics
 from agents1.BW4TBaselineAgent import BaseLineAgent
 from agents1.BW4THuman import Human
+from agents1.Liar import Liar
 from agents1.colorblind import Colorblind
 
 
@@ -12,8 +13,8 @@ press the start button in god mode to start the session.
 
 if __name__ == "__main__":
     agents = [
-        {'name':'agent1', 'botclass':Colorblind, 'settings':{}},
-        {'name':'agent2', 'botclass':Colorblind, 'settings':{}},
+        {'name':'Color', 'botclass':Colorblind, 'settings':{}},
+        {'name':'Liar', 'botclass':Liar, 'settings':{}},
         {'name':'human', 'botclass':Human, 'settings':{}}
         ]
 
