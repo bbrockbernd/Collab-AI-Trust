@@ -76,7 +76,6 @@ class Liar(BaseLineAgent):
         
         
         while True:
-            print(self._phase)
             if Phase.SET_UP_VARIABLES==self._phase:
                 for key in state.keys():
                     if "Collect_Block" in key:
@@ -423,7 +422,7 @@ class Liar(BaseLineAgent):
         toLie = self.toLieOrNotToLieZetsTheKwestion()
         lieOptions = [otherBlock for otherBlock in self.collectBlocks.values()
                     if not self.sameVizuals(block, otherBlock)]
-        location = str(state[block['obj_id']]['location'])
+        location = state[block['obj_id']]['location']
         if len(lieOptions) > 0:
             lie = random.choice(lieOptions) 
             
@@ -431,7 +430,9 @@ class Liar(BaseLineAgent):
             lie = state[block['obj_id']]
             location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location'] if toLie else location
         messageBlock = lie if toLie else state[block['obj_id']] 
-        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  messageBlock["visualization"]['colour']}) + " at location " + location
+        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'],
+                                         "shape":  messageBlock["visualization"]['shape'],
+                                         "colour":  messageBlock["visualization"]['colour']}) + " at location " + str(location)
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])
     
     def _sendGrabBlockMessage(self, state:State):
@@ -442,12 +443,29 @@ class Liar(BaseLineAgent):
             block = random.choice([block for block_id in self.knownBlocks
             if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)])
         elif lie:
-            location = (math.ceil(random.random() * location[0]), math.ceil(random.random() * location[1])) ## SHOULD BE IMPROVED
-            
-        super()._sendMessage('Picking up goal block {"size": ' + str(block['visualization']['size'])  
-                            + ', "shape": ' + str(block['visualization']['shape'])
-                            + ', "colour": ' + str(block['visualization']['colour'])
-                            + '} at location ' + str(self.blockToGrab['location']), state[self.agent_id]['obj_id'])           
+            location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location']
+        print(location)
+        msg = "Picking up goal block " + str({"size":  block['visualization']['size'], 
+                                                         "shape": block['visualization']['shape'],
+                                                         "colour": block['visualization']['colour']}) + " at location " + str(location)   
+        super()._sendMessage(msg, state[self.agent_id]['obj_id'])     
+        
+    def msgAboutDropLocation(self, state:State):
+        carriedBlock = self.agent_properties['is_carrying'][0]
+        lie = self.toLieOrNotToLieZetsTheKwestion()
+        location = state[self.agent_id]['location']
+        block = carriedBlock
+        
+        if lie: 
+            if len(self.collectBlocks) > 0:
+                block = random.choice([block for block in self.collectBlocks.values()
+                    if  (block['visualization']['shape']  is not carriedBlock['visualization']['shape']) or
+                        (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
+                        (block['visualization']['size']   is not carriedBlock['visualization']['size'])])
+        msg = "Dropped goal block " + str({"size":  block['visualization']['size'] 
+                                                        , "shape": block['visualization']['shape']
+                                                        , "colour": block['visualization']['colour']}) + "at drop location " + str(location)        
+        super()._sendMessage(msg, state[self.agent_id]['obj_id'])      
                 
     def updateBlocks(self, block):
         obj_id = block['obj_id']
@@ -473,25 +491,6 @@ class Liar(BaseLineAgent):
             self.addNewBlock(state, block)
             self.updateBlocks(block)
                                
-    
-    
-    def msgAboutDropLocation(self, state:State):
-        carriedBlock = self.agent_properties['is_carrying'][0]
-        lie = self.toLieOrNotToLieZetsTheKwestion()
-        location = state[self.agent_id]['location']
-        block = carriedBlock
-        
-        if lie: 
-            if len(self.collectBlocks) > 0:
-                block = random.choice([block for block in self.collectBlocks.values()
-                    if  (block['visualization']['shape']  is not carriedBlock['visualization']['shape']) or
-                        (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
-                        (block['visualization']['size']   is not carriedBlock['visualization']['size'])])
-                
-        super()._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
-                            + ', "shape": ' + str(block['visualization']['shape'])
-                            + ', "colour": ' + str(block['visualization']['colour'])
-                            + '} at drop location ' + str(location), state[self.agent_id]['obj_id'])
             
     def checkGoalBlockPresent(self, state:State):
         for block in state.keys():
