@@ -444,7 +444,6 @@ class Liar(BaseLineAgent):
             if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)])
         elif lie:
             location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location']
-        print(location)
         msg = "Picking up goal block " + str({"size":  block['visualization']['size'], 
                                                          "shape": block['visualization']['shape'],
                                                          "colour": block['visualization']['colour']}) + " at location " + str(location)   
