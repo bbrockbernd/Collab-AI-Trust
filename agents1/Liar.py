@@ -1,6 +1,7 @@
 
 from typing import Dict
 import enum, random
+from agents1.BW4TBaselineAgent import BaseLineAgent
 from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
@@ -30,7 +31,7 @@ class Phase(enum.Enum):
     REPLACE_ALL_BLOCKS = 15
 
 
-class Liar(BW4TBrain):
+class Liar(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
@@ -69,9 +70,9 @@ class Liar(BW4TBrain):
             if member!=agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)       
         # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
+        receivedMessages = super()._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         
         while True:
@@ -404,19 +405,19 @@ class Liar(BW4TBrain):
         msg = random.choice([door for door in state.values()
             if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
             and door['room_name'] is not self._door['room_name']])['room_name'] if self.toLieOrNotToLieZetsTheKwestion() else self._door['room_name']
-        self._sendMessage("Searching through "  + str(msg), state[self.agent_id]['obj_id']) 
+        super()._sendMessage("Searching through "  + str(msg), state[self.agent_id]['obj_id']) 
         
     def _sendMovingToDoorMessage(self, state:State, correctDoor):       
         msg = random.choice([door for door in state.values()
             if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
             and door['room_name'] is not correctDoor])['room_name'] if self.toLieOrNotToLieZetsTheKwestion() else correctDoor
-        self._sendMessage('Moving to ' + str(msg), state[self.agent_id]['obj_id'])
+        super()._sendMessage('Moving to ' + str(msg), state[self.agent_id]['obj_id'])
             
     def _sendDoorOpenMessage(self, state:State):
         door = random.choice([door for door in state.values()
                     if 'class_inheritance' in door and 'Door' in door['class_inheritance'] 
                     and door['room_name'] is not self._door['room_name']]) if self.toLieOrNotToLieZetsTheKwestion() else self._door
-        self._sendMessage('Opening door of ' + str(door['room_name']), state[self.agent_id]['obj_id'])
+        super()._sendMessage('Opening door of ' + str(door['room_name']), state[self.agent_id]['obj_id'])
          
     def sendGoalBlockFoundMessage(self, state:State, block):
         toLie = self.toLieOrNotToLieZetsTheKwestion()
@@ -431,7 +432,7 @@ class Liar(BW4TBrain):
             location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location'] if toLie else location
         messageBlock = lie if toLie else state[block['obj_id']] 
         msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  messageBlock["visualization"]['colour']}) + " at location " + location
-        self._sendMessage(msg, state[self.agent_id]['obj_id'])
+        super()._sendMessage(msg, state[self.agent_id]['obj_id'])
     
     def _sendGrabBlockMessage(self, state:State):
         lie = self.toLieOrNotToLieZetsTheKwestion()
@@ -443,7 +444,7 @@ class Liar(BW4TBrain):
         elif lie:
             location = (math.ceil(random.random() * location[0]), math.ceil(random.random() * location[1])) ## SHOULD BE IMPROVED
             
-        self._sendMessage('Picking up goal block {"size": ' + str(block['visualization']['size'])  
+        super()._sendMessage('Picking up goal block {"size": ' + str(block['visualization']['size'])  
                             + ', "shape": ' + str(block['visualization']['shape'])
                             + ', "colour": ' + str(block['visualization']['colour'])
                             + '} at location ' + str(self.blockToGrab['location']), state[self.agent_id]['obj_id'])           
@@ -487,7 +488,7 @@ class Liar(BW4TBrain):
                         (block['visualization']['colour'] is not carriedBlock['visualization']['colour']) or
                         (block['visualization']['size']   is not carriedBlock['visualization']['size'])])
                 
-        self._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
+        super()._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
                             + ', "shape": ' + str(block['visualization']['shape'])
                             + ', "colour": ' + str(block['visualization']['colour'])
                             + '} at drop location ' + str(location), state[self.agent_id]['obj_id'])
@@ -516,7 +517,7 @@ class Liar(BW4TBrain):
     def toLieOrNotToLieZetsTheKwestion(self):
         lie= random.random() < 0.8
         # if lie:
-        #     self._sendMessage("My next message is a lie", self.state[self.agent_id]['obj_id'])
+        #     super()._sendMessage("My next message is a lie", self.state[self.agent_id]['obj_id'])
         return lie
     
     def _roomExplorationWayPoints(self, state:State):
@@ -572,39 +573,3 @@ class Liar(BW4TBrain):
                     startY = roomTile['location'][1]
         return [(startX, startY), (endX, endY)]
         
-    def _sendMessage(self, mssg, sender):
-        '''
-        Enable sending messages in one line of code
-        '''
-        msg = Message(content=mssg, from_id=sender)
-        if msg.content not in self.received_messages:
-            self.send_message(msg)
-
-    def _processMessages(self, teamMembers):
-        '''
-        Process incoming messages and create a dictionary with received messages from each team member.
-        '''
-        receivedMessages = {}
-        for member in teamMembers:
-            receivedMessages[member] = []
-        for mssg in self.received_messages:
-            for member in teamMembers:
-                if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)
-        return receivedMessages
-
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
-                    break
-        return trustBeliefs
