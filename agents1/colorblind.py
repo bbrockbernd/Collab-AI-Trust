@@ -1,14 +1,14 @@
+import random
 from typing import Dict
 import enum
 
-from bw4t.BW4TBrain import BW4TBrain
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.messages.message import Message
 
-import numpy as np
-import math
+from agents1.BW4TBaselineAgent import BaseLineAgent
+
 
 class Phase(enum.Enum):
     SET_UP_VARIABLES = 0,
@@ -26,7 +26,7 @@ class Phase(enum.Enum):
     FOLLOW_PATH_TO_VERIFY_COLLECTION = 12
 
 
-class Colorblind(BW4TBrain):
+class Colorblind(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
@@ -65,9 +65,9 @@ class Colorblind(BW4TBrain):
             if member!=agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)       
         # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
+        receivedMessages = super()._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         
         while True:
@@ -84,7 +84,7 @@ class Colorblind(BW4TBrain):
                 self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
                 
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
-                if len(self.roomsToExplore)>0:
+                if len(self.roomsToExplore)>0 and not self._possibleToPlanPathToGoalBlock():
                     self._planPathToUnsearchedRoom() 
                     self._sendMovingToDoorMessage(state, self._door['room_name'])
                     self._phase=Phase.FOLLOW_PATH_TO_UNSEARCHED_ROOM
@@ -178,6 +178,7 @@ class Colorblind(BW4TBrain):
                 return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }    
             
             if Phase.PLAN_PATH_TO_VERIFY_COLLECTION==self._phase:
+                self.updateBlocks(state)
                 self._navigator.reset_full()
                 locations = []
                 for collectBlock in self.collectBlocks.values():                 
@@ -191,12 +192,16 @@ class Colorblind(BW4TBrain):
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
                     return action, {}   
-                self._phase=Phase.PLAN_TO_GOAL_BLOCK 
+                
+                elif len (self.roomsToExplore) > 0:
+                    self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
+                else:
+                    self._phase=Phase.PLAN_TO_GOAL_BLOCK
     
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
         # Randomly pick a closed door
-        self._door = self.roomsToExplore[0]#random.choice(self.roomsToExplore)
+        self._door = random.choice(self.roomsToExplore)
         self.roomsToExplore.remove(self._door)
         doorLoc = self._door['location']
         # Location in front of door is south from door
@@ -211,12 +216,14 @@ class Colorblind(BW4TBrain):
                 
                 if collectBlock is None:
                     return None
-        
-                for block_id in self.knownBlocks:
-                    block = self.knownBlocks[block_id]
-                    if self.knownBlocks[block_id]['isGoalBlock'] and self.knownBlocks[block_id]['is_delivered'] == False and self.sameVizuals(collectBlock, block):
-                        return block    
-        return None
+                ids = list(self.knownBlocks.keys())
+                ids.sort(reverse=True)
+                for id in ids:
+                    block = self.knownBlocks[id]
+                    if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block):
+                        self.blockToGrab = block
+                        return block
+                return None
                     
     def _possibleToPlanPathToGoalBlock(self):
         self._navigator.reset_full()
@@ -279,32 +286,31 @@ class Colorblind(BW4TBrain):
     def sendExploringMessage(self, state:State):
         msg = self._door['room_name']
         if type(msg) == str:
-            self._sendMessage("Searching through "  + msg, state[self.agent_id]['obj_id'])
+            super()._sendMessage("Searching through "  + msg, state[self.agent_id]['obj_id'])
         else:
-            self._sendMessage("Searching through "  + msg["door_name"], state[self.agent_id]['obj_id']) 
+            super()._sendMessage("Searching through "  + msg["door_name"], state[self.agent_id]['obj_id']) 
         
     def _sendMovingToDoorMessage(self, state:State, correctDoor):       
         msg = correctDoor
-        self._sendMessage('Moving to ' + str(msg), state[self.agent_id]['obj_id'])
+        super()._sendMessage('Moving to ' + str(msg), state[self.agent_id]['obj_id'])
             
     def _sendDoorOpenMessage(self, state:State):
         door = self._door
-        self._sendMessage('Opening door of ' + str(door['room_name']), state[self.agent_id]['obj_id'])
+        super()._sendMessage('Opening door of ' + str(door['room_name']), state[self.agent_id]['obj_id'])
          
     def sendGoalBlockFoundMessage(self, state:State, block):
         messageBlock = state[block['obj_id']] 
         location = str(state[block['obj_id']]['location'])
-        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  "?"}) + " at location " + location
-        self._sendMessage(msg, state[self.agent_id]['obj_id'])
+        msg = "Found goal block " + str({"size": messageBlock["visualization"]['size'], "shape":  messageBlock["visualization"]['shape'], "colour":  None}) + " at location " + location
+        super()._sendMessage(msg, state[self.agent_id]['obj_id'])
     
     def _sendGrabBlockMessage(self, state:State):
         block = self.blockToGrab
         location = self.blockToGrab['location']
             
-        self._sendMessage('Picking up goal block {"size": ' + str(block['visualization']['size'])  
-                            + ', "shape": ' + str(block['visualization']['shape'])
-                            + ', "colour": ' + "?"
-                            + '} at location ' + str(self.blockToGrab['location']), state[self.agent_id]['obj_id'])           
+        super()._sendMessage("Picking up goal block " + str ({"size": block['visualization']['size'], 
+                                                                          "shape": block['visualization']['shape'],
+                                                                          "colour": "?"})+ " at location " + str(self.blockToGrab['location']), state[self.agent_id]['obj_id'])           
                 
     def updateBlock(self, block):
         obj_id = block['obj_id']
@@ -342,10 +348,9 @@ class Colorblind(BW4TBrain):
         location = state[self.agent_id]['location']
         block = carriedBlock
         
-        self._sendMessage('Dropped goal block {"size": ' + str(block['visualization']['size'])  
-                            + ', "shape": ' + str(block['visualization']['shape'])
-                            + ', "colour": ' + "'?'"
-                            + '} at drop location ' + str(location), state[self.agent_id]['obj_id'])
+        super()._sendMessage("Dropped goal block " + str({"size": block['visualization']['size'], 
+                                                         "shape": block['visualization']['shape'],
+                                                         "colour": "?" }) + " at drop location " + str(location), state[self.agent_id]['obj_id'])
             
     def checkGoalBlockPresent(self, state:State):
         for block in state.keys():
@@ -396,65 +401,27 @@ class Colorblind(BW4TBrain):
         
     
     
-    def _getRoomSize(self, room, state:State):
-        startX = startY = endX = endY = None
-        for roomTile in state.get_room_objects(room):
-            if 'area' in roomTile['name']:
-                if endX is None or roomTile['location'][0] > endX:
-                    endX = roomTile['location'][0]
-                if endY is None or roomTile['location'][0] > endY:
-                    endY = roomTile['location'][1]
-                if startX is None or roomTile['location'][0] < startX:
-                    startX = roomTile['location'][0]
-                if startY is None or roomTile['location'][0] < startY:
-                    startY = roomTile['location'][1]
-        return [(startX, startY), (endX, endY)]
-        
-    def _sendMessage(self, mssg, sender):
-        '''
-        Enable sending messages in one line of code
-        '''
-        msg = Message(content=mssg, from_id=sender)
-        if msg.content not in self.received_messages:
-            self.send_message(msg)
-
-    def _processMessages(self, teamMembers):
-        '''
-        Process incoming messages and create a dictionary with received messages from each team member.
-        '''
-        receivedMessages = {}
-        for member in teamMembers:
-            receivedMessages[member] = []
-        for mssg in self.received_messages:
-            for member in teamMembers:
-                if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)
-        return receivedMessages
-    
-    
     def validateBlock(self, location, color: str, shape: int): 
         possible_blocks = []
         for block in self.knownBlocks.values():
-            if (block['visualization']['location'] == location):
+            if (block['location'] == location):
                 possible_blocks.append(block)
                 if (block['visualization']['shape'] == shape):
                         return 1
         if len(possible_blocks) == 0:
             return 0
         return -1
-
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member]-=0.1
-                    break
-        return trustBeliefs
+    
+    def _getRoomSize(self, room, state:State):
+        startX = startY = endX = endY = None
+        for roomTile in state.get_room_objects(room):
+            if 'area' in roomTile['name']:
+                if endX is None or roomTile['location'][0] > endX:
+                    endX = roomTile['location'][0]
+                if endY is None or roomTile['location'][1] > endY:
+                    endY = roomTile['location'][1]
+                if startX is None or roomTile['location'][0] < startX:
+                    startX = roomTile['location'][0]
+                if startY is None or roomTile['location'][1] < startY:
+                    startY = roomTile['location'][1]
+        return [(startX, startY), (endX, endY)]
