@@ -1,13 +1,12 @@
 import ast
 from typing import List, Dict
 import enum, random
-from bw4t.BW4TBrain import BW4TBrain
+from agents1.BW4TBaselineAgent import BaseLineAgent
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
 from matrx.actions.door_actions import OpenDoorAction
 from matrx.actions.object_actions import GrabObject, DropObject
-from matrx.messages.message import Message
 
 
 class Phase(enum.Enum):
@@ -131,7 +130,7 @@ class MyWorld:
             return ""
 
 
-class Lazy(BW4TBrain):
+class Lazy(BaseLineAgent):
 
     def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
@@ -188,11 +187,11 @@ class Lazy(BW4TBrain):
             return
 
         if len(self._world.getGoals()) > 0 and self._phase is not Phase.EXPLORE_ROOM:
-            self._sendMessage('Quitting current task', self.agent_id)
+            super()._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
         if self._counter > 7 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
-            self._sendMessage('Quitting current task', self.agent_id)
+            super()._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
 
@@ -227,7 +226,7 @@ class Lazy(BW4TBrain):
             self._destination = room.doorLoc
             self._destination = (self._destination[0], self._destination[1] + 1)
             self._dest_id = room.name
-            self._sendMessage(f'Moving to {room.name}', self.agent_id)
+            super()._sendMessage(f'Moving to {room.name}', self.agent_id)
 
             self._quitting = random.choice([True, False])
 
@@ -274,7 +273,7 @@ class Lazy(BW4TBrain):
         self._phase = Phase.CALCULATING
         self._inventory = block
 
-        self._sendMessage(f'Picking up goal block {block.visualization} at location {block.location}', self.agent_id)
+        super()._sendMessage(f'Picking up goal block {block.visualization} at location {block.location}', self.agent_id)
         return GrabObject.__name__, {'object_id': block.obj_id}
 
     def drop_block(self) -> (str, {}):
@@ -284,13 +283,13 @@ class Lazy(BW4TBrain):
         block.dropPoint.completed = True
         self._phase = Phase.WHAT_TO_DO
 
-        self._sendMessage(f'Dropped goal block {block.visualization} at drop location {self._location}', self.agent_id)
+        super()._sendMessage(f'Dropped goal block {block.visualization} at drop location {self._location}', self.agent_id)
         return DropObject.__name__, {'object_id': block.obj_id}
 
     def open_door(self) -> (str, {}):
         self._phase = Phase.MOVING
 
-        self._sendMessage(f"Opening door of {self._current_door_id.split('_')[0]}_{self._current_door_id.split('_')[1]}", self.agent_id)
+        super()._sendMessage(f"Opening door of {self._current_door_id.split('_')[0]}_{self._current_door_id.split('_')[1]}", self.agent_id)
         return OpenDoorAction.__name__, {'object_id': self._current_door_id}
 
     def plan_room_explore(self) -> (str, {}):
@@ -300,7 +299,7 @@ class Lazy(BW4TBrain):
         self._navigator.reset_full()
         self._navigator.add_waypoints(roomSquares)
 
-        self._sendMessage(f"Searching through {self._dest_id}", self.agent_id)
+        super()._sendMessage(f"Searching through {self._dest_id}", self.agent_id)
         return self.next(Phase.EXPLORE_ROOM)
 
     def check_surroundings(self):
@@ -310,7 +309,7 @@ class Lazy(BW4TBrain):
                 block = MyBlock(block_obj, self._dest_id)
                 self._world.addBlock(block)
                 if block.isGoal:
-                    self._sendMessage(f'Found goal block {block.visualization} at location {block.location}', self.agent_id)
+                    super()._sendMessage(f'Found goal block {block.visualization} at location {block.location}', self.agent_id)
 
     def explore_room(self) -> (str, {}):
         self.check_surroundings()
@@ -339,9 +338,9 @@ class Lazy(BW4TBrain):
             if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
                 # Process messages from team members
-        receivedMessages = self._processMessages(self._teamMembers)
+        receivedMessages = super()._processMessages(self._teamMembers)
         # Update trust beliefs for team members
-        self._trustBlief(self._teamMembers, receivedMessages)
+        super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
 
         self._location = self._current_state.get_self()['location']
 
@@ -384,40 +383,3 @@ class Lazy(BW4TBrain):
                 return 1
         return -1
 
-    def _sendMessage(self, mssg, sender):
-        '''
-        Enable sending messages in one line of code
-        '''
-        msg = Message(content=mssg, from_id=sender)
-        if msg.content not in self.received_messages:
-            self.send_message(msg)
-
-    def _processMessages(self, teamMembers):
-        '''
-        Process incoming messages and create a dictionary with received messages from each team member.
-        '''
-        receivedMessages = {}
-        for member in teamMembers:
-            receivedMessages[member] = []
-        for mssg in self.received_messages:
-            for member in teamMembers:
-                if mssg.from_id == member:
-                    receivedMessages[member].append(mssg.content)
-        self.received_messages = []
-        return receivedMessages
-
-    def _trustBlief(self, member, received):
-        '''
-        Baseline implementation of a trust belief. Creates a dictionary with trust belief scores for each team member, for example based on the received messages.
-        '''
-        # You can change the default value to your preference
-        default = 0.5
-        trustBeliefs = {}
-        for member in received.keys():
-            trustBeliefs[member] = default
-        for member in received.keys():
-            for message in received[member]:
-                if 'Found' in message and 'colour' not in message:
-                    trustBeliefs[member] -= 0.1
-                    break
-        return trustBeliefs
