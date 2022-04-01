@@ -19,9 +19,9 @@ from bw4t.BW4THumanBrain import HumanBrain
 DEFAULT_WORLDSETTINGS: dict={
     'deadline': 3000, # Ticks after which world terminates anyway 
     'tick_duration': 0.1, # Set to 0 for fastest possible runs.
-    'random_seed': 1,
+    'random_seed': np.random.randint(1,27),
     'verbose': False,
-    'matrx_paused':True,
+    'matrx_paused':False,
     'run_matrx_api':True, # If you want to allow web connection
     'run_matrx_visualizer':True, # if you want to allow web visualizer
 
@@ -35,9 +35,9 @@ DEFAULT_WORLDSETTINGS: dict={
         'r': OpenDoorAction.__name__,
         'f': CloseDoorAction.__name__,
     },
-    'room_size' : (6, 4),  # width, height
-    'nr_rooms' : 9, # total number of rooms.
-    'rooms_per_row':3, #number of rooms per row.
+    'room_size' : (np.random.randint(4,10), np.random.randint(4,10)),  # width, height
+    'nr_rooms' : np.random.randint(9,27), # total number of rooms.
+    'rooms_per_row': np.random.randint(3,7), #number of rooms per row.
     'average_blocks_per_room': 2,
     'block_shapes': [0, 1, 2], # possible shapes of the blocks
     'block_colors': ['#0008ff', '#ff1500', '#0dff00'], #possible colors of blocks
