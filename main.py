@@ -1,9 +1,6 @@
-<<<<<<< HEAD
 from bw4t.BW4TWorld import DEFAULT_WORLDSETTINGS, BW4TWorld
-=======
 from agents1.Lazy import Lazy
 from bw4t.BW4TWorld import BW4TWorld
->>>>>>> 33ba57c (WIP lazy agent)
 from bw4t.statistics import Statistics
 from agents1.BW4TBaselineAgent import BaseLineAgent
 from agents1.BW4THuman import Human

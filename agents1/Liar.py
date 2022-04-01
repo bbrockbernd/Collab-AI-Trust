@@ -68,6 +68,7 @@ class Liar(BaseLineAgent):
         # Process messages from team members
         receivedMessages = super()._processMessages(self._teamMembers)
         # Update trust beliefs for team members
+        print(receivedMessages)
         super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
         
         
@@ -379,7 +380,7 @@ class Liar(BaseLineAgent):
                     self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
                     self.knownBlocks[obj_id]['is_delivered_by_me'] = False                    
             if self.knownBlocks[obj_id]["isGoalBlock"]:
-                self.sendGoalBlockFoundMessage(state, collectBlock)
+                self.sendGoalBlockFoundMessage(state, block)
                 
                 
     '''
