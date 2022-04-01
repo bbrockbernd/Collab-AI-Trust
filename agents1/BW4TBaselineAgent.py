@@ -128,8 +128,8 @@ class BaseLineAgent(BW4TBrain):
     '''
     def _computeTrustBeliefs(self, agents):
         trust_beliefs = {}
-        for [agent, trust, rep] in agents:
-            trust_beliefs[agent] = (2 * float(trust) + float(rep)) / 3
+        for [agent, direct_experience, indirect_experience, rep] in agents:
+            trust_beliefs[agent] = (4 * float(direct_experience) + float(indirect_experience) + float(rep)) / 6
         return trust_beliefs
 
     '''
@@ -180,24 +180,28 @@ class BaseLineAgent(BW4TBrain):
         """
         received = received.replace('T', 't').replace('F', 'f')
         message = received.split()
-        if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
-            return MessageType.MOVING, message[2]
-        elif len(message) == 4 and ' '.join(message[:3]) == 'Opening door of':
-            return MessageType.OPENING, message[3]
-        elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
-            return MessageType.SEARCHING, message[2]
-        elif len(message) > 3 and ' '.join(message[:3]) == 'found goal block':
-            return MessageType.FOUND, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                        self._getLocationFromMessage(received)]
-        elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
-            return MessageType.DROPPED, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                        self._getLocationFromMessage(received)]
-        elif len(message) > 4 and ' '.join(message[:4]) == 'Picking up goal block':
-            return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                        self._getLocationFromMessage(received)]
-        elif len(message) > 3 and ' '.join(message[:3]) == 'found block by':
-            return MessageType.FOUND_CONFIRMATION, [message[3], message[4]]
-        else:
+        try:
+            if len(message) == 3 and ' '.join(message[:2]) == 'Moving to':
+                return MessageType.MOVING, message[2]
+            elif len(message) == 4 and ' '.join(message[:3]) == 'Opening door of':
+                return MessageType.OPENING, message[3]
+            elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
+                return MessageType.SEARCHING, message[2]
+            elif len(message) > 3 and ' '.join(message[:3]) == 'found goal block':
+                return MessageType.FOUND, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
+                                            self._getLocationFromMessage(received)]
+            elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
+                return MessageType.DROPPED, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
+                                            self._getLocationFromMessage(received)]
+            elif len(message) > 4 and ' '.join(message[:4]) == 'Picking up goal block':
+                return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
+                                            self._getLocationFromMessage(received)]
+            elif len(message) > 3 and ' '.join(message[:3]) == 'found block by':
+                return MessageType.FOUND_CONFIRMATION, [message[3], message[4]]
+            else:
+                return MessageType.INVALID, []
+        except Exception:
+            print("ERROR WITH PREPROCESSING FOLLOWING MESSAGE: " + received)
             return MessageType.INVALID, []
 
     '''
@@ -219,7 +223,7 @@ class BaseLineAgent(BW4TBrain):
         truth_reward = 0.1
         lie_cost = 0.5
         filename = name + '_memory.csv'
-        params = ['Agent', 'Direct Trust', 'Reputation']
+        params = ['Agent', 'Direct Experiences', 'Indirect Experiences', 'Reputation']
         agents = []
         try:
             with open(filename, 'r') as mem_file:
@@ -237,14 +241,14 @@ class BaseLineAgent(BW4TBrain):
                 memory.writerow(params)
                 agents = []  # clear any previously appended data if agent mismatch
                 for member in members:
-                    agents.append([member, default, default])
+                    agents.append([member, default, default, default])
                 memory.writerows(agents)
 
-        agents = [[agent[0], float(agent[1]), float(agent[2])] for agent in agents]
+        agents = [[agent[0], float(agent[1]), float(agent[2]), float(agent[3])] for agent in agents]
         # Process received messages
         for member in received.keys():
             # Agent index for trust modification
-            member_index = [name for name, trust, reputation in agents].index(member)
+            member_index = [name for name, direct, indirect, reputation in agents].index(member)
 
             for message in received[member]:
                 message_type, message_data = self._normalizeMessage(message)  # Preprocess message
@@ -277,12 +281,10 @@ class BaseLineAgent(BW4TBrain):
                                                                      message_data[0]['shape'])
 
                             if block_confirmation == 1:
-                                print("YEEEEEEEE")
                                 agents[member_index][1] += truth_reward
                                 self._sendMessage("Found block by " + member + " approved", name)
 
                             elif block_confirmation == -1:
-                                print("NOOOOOOOOO")
                                 agents[member_index][1] -= lie_cost
                                 self._sendMessage("Found block by " + member + " denied", name)
 
@@ -322,6 +324,14 @@ class BaseLineAgent(BW4TBrain):
                                 else:
                                     agents[member_index][1] -= lie_cost
 
+                        # Indirect Experience
+                        elif message_type == MessageType.FOUND_CONFIRMATION:
+                            agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
+                            if message_data[1] == 'approved':
+                                agents[agent_index][2] += truth_reward
+                            elif message_data[1] == 'denied':
+                                agents[agent_index][2] += lie_cost
+
                         # All the other messages have max 1 consecutive type of message
                         else:
                             # Store message
@@ -354,5 +364,7 @@ class BaseLineAgent(BW4TBrain):
             memory.writerow(params)
             memory.writerows(agents)
 
-        return self._computeTrustBeliefs(agents)
+        trust_beliefs = self._computeTrustBeliefs(agents)
+
+        return trust_beliefs
 
