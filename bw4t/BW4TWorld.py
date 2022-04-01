@@ -16,10 +16,11 @@ from bw4t.CollectionGoal import CollectionGoal
 from bw4t.BW4TLogger import BW4TLogger
 from bw4t.BW4THumanBrain import HumanBrain
 
-DEFAULT_WORLDSETTINGS: dict={
+def createwordsettings (): 
+    return {
     'deadline': 3000, # Ticks after which world terminates anyway 
     'tick_duration': 0.1, # Set to 0 for fastest possible runs.
-    'random_seed': np.random.randint(1,27),
+    'random_seed': np.random.randint(1,100),
     'verbose': False,
     'matrx_paused':False,
     'run_matrx_api':True, # If you want to allow web connection
@@ -35,10 +36,10 @@ DEFAULT_WORLDSETTINGS: dict={
         'r': OpenDoorAction.__name__,
         'f': CloseDoorAction.__name__,
     },
-    'room_size' : (6,5),  # width, height
-    'nr_rooms' : 9, # total number of rooms.
-    'rooms_per_row': 3, #number of rooms per row.
-    'average_blocks_per_room': 2,
+    'room_size' : (6,4),  # width, height
+    'nr_rooms' : np.random.randint(3, 40), # total number of rooms.
+    'rooms_per_row': np.random.randint(3,10), #number of rooms per row.
+    'average_blocks_per_room': 3,
     'block_shapes': [0, 1, 2], # possible shapes of the blocks
     'block_colors': ['#0008ff', '#ff1500', '#0dff00'], #possible colors of blocks
     'room_colors': ['#0008ff', '#ff1500', '#0dff00'],
@@ -68,7 +69,7 @@ class BW4TWorld:
     internally creates the gridworld using WorldBuilder.
     
     '''
-    def __init__(self, agents:List[dict], worldsettings:dict=DEFAULT_WORLDSETTINGS):
+    def __init__(self, agents:List[dict], worldsettings:dict=createwordsettings()):
         '''
            @param agents a list like 
             [
@@ -110,7 +111,7 @@ class BW4TWorld:
         self._builder.startup(media_folder=media_folder)
         self._builder.add_logger(BW4TLogger, save_path='.')
 
-        self._gridworld = self._builder.worlds(nr_of_worlds=1).__next__()
+        self._gridworld = self._builder.worlds(nr_of_worlds=10).__next__()
 
     def run(self):
         '''
