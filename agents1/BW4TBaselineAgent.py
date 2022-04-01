@@ -114,7 +114,10 @@ class BaseLineAgent(BW4TBrain):
         for room in rooms:
             objects = state.get_room_objects(room)
             for obj in objects:
-                if obj[location] == location:
+                print(location)
+                (x, y) = location
+                print(obj, (x,y))
+                if obj['location'] == (x,y):
                     return room
         raise Exception
 
@@ -128,6 +131,13 @@ class BaseLineAgent(BW4TBrain):
             trust_beliefs[agent] = (2 * float(trust) + float(rep)) / 3
         return trust_beliefs
 
+    '''
+    Transform text ending with "location (x, y)" to a tupple (x,y)
+    '''
+    def _getLocationFromMessage(self, message):
+        loc = message[message.find("location ("):-1]
+        return (int(loc[loc.find("(")+1:loc.find(',')]), int(loc[loc.find(",")+2:]))
+    
     '''
     Transform text message into data
     '''
@@ -150,13 +160,13 @@ class BaseLineAgent(BW4TBrain):
             return MessageType.SEARCHING, message[2]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
             return MessageType.FOUND, [received[received.find('{')+1:received.find('}')],
-                                       received[received.find('(')+1:received.find(')')]]
+                                        self._getLocationFromMessage(received)]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
             return MessageType.DROPPED, [received[received.find('{')+1:received.find('}')],
-                                         received[received.find('(')+1:received.find(')')]]
+                                        self._getLocationFromMessage(received)]
         elif len(message) > 3 and ' '.join(message[:4]) == 'Picking up goal block':
             return MessageType.PICKING_UP, [received[received.find('{')+1:received.find('}')],
-                                            received[received.find('(')+1:received.find(')')]]
+                                        self._getLocationFromMessage(received)]
         else:
             return MessageType.INVALID, []
 
