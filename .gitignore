@@ -7,5 +7,4 @@
 /world_1/
 /world_2/
 .DS_Store
-/agent1_memory.csv
-/agent2_memory.csv
+*memory.csv
