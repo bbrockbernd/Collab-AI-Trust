@@ -375,7 +375,7 @@ class Lazy(BaseLineAgent):
 
         return self.next(self._phase)
 
-    def validateBlock(self, location: (int, int), color: str, shape: int) -> int:
+    def _validateBlock(self, location: (int, int), color: str, shape: int) -> int:
         if location not in self._checked_locations:
             return 0
         for block in self._world.blocks.values():

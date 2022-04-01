@@ -24,7 +24,8 @@ class MessageType(enum.Enum):
     FOUND = 4
     PICKING_UP = 5
     DROPPED = 6
-    INVALID = 7
+    FOUND_CONFIRMATION = 7
+    INVALID = 8
 
 class BaseLineAgent(BW4TBrain):
 
@@ -185,15 +186,17 @@ class BaseLineAgent(BW4TBrain):
             return MessageType.OPENING, message[3]
         elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
             return MessageType.SEARCHING, message[2]
-        elif len(message) > 3 and ' '.join(message[:3]) == 'Found goal block':
+        elif len(message) > 3 and ' '.join(message[:3]) == 'found goal block':
             return MessageType.FOUND, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
         elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
             return MessageType.DROPPED, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
-        elif len(message) > 3 and ' '.join(message[:4]) == 'Picking up goal block':
+        elif len(message) > 4 and ' '.join(message[:4]) == 'Picking up goal block':
             return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                         self._getLocationFromMessage(received)]
+        elif len(message) > 3 and ' '.join(message[:3]) == 'found block by':
+            return MessageType.FOUND_CONFIRMATION, [message[3], message[4]]
         else:
             return MessageType.INVALID, []
 
@@ -213,8 +216,8 @@ class BaseLineAgent(BW4TBrain):
     def _trustBelief(self, name, members, received, state: State):
         # Read (or initialize) memory file
         default = 0.0
-        truth = 0.1
-        lie = 0.5
+        truth_reward = 0.1
+        lie_cost = 0.5
         filename = name + '_memory.csv'
         params = ['Agent', 'Direct Trust', 'Reputation']
         agents = []
@@ -252,6 +255,7 @@ class BaseLineAgent(BW4TBrain):
 
                         # Check if message is of type FOUND and already has data
                         if message_type == MessageType.FOUND:
+
                             # Store message
                             if type_already_exists:
                                 found_blocks = self._log[member][message_type]
@@ -263,19 +267,24 @@ class BaseLineAgent(BW4TBrain):
                             # Trust: Check if blocks FOUND are in the room the agent said they were SEARCHING
                             if MessageType.SEARCHING in self._log[member] and self._log[member][MessageType.SEARCHING]\
                                     == self._getRoom(message_data[1], state):
-                                agents[member_index][1] += truth
+                                agents[member_index][1] += truth_reward
                             else:
-                                agents[member_index][1] -= lie
+                                agents[member_index][1] -= lie_cost
 
                             # Trust: Check if FOUND block by other matches what you know
                             block_confirmation = self._validateBlock(message_data[1],
                                                                      message_data[0]['colour'],
                                                                      message_data[0]['shape'])
-                            # tod: add broadcast
+
                             if block_confirmation == 1:
-                                agents[member_index][1] += truth
+                                print("YEEEEEEEE")
+                                agents[member_index][1] += truth_reward
+                                self._sendMessage("Found block by " + member + " approved", name)
+
                             elif block_confirmation == -1:
-                                agents[member_index][1] -= lie
+                                print("NOOOOOOOOO")
+                                agents[member_index][1] -= lie_cost
+                                self._sendMessage("Found block by " + member + " denied", name)
 
                         # Check if message is of type PICKING_UP or DROPPED and already has data (max 2)
                         elif message_type == MessageType.PICKING_UP or message_type == MessageType.DROPPED:
@@ -301,17 +310,17 @@ class BaseLineAgent(BW4TBrain):
                             if message_type == MessageType.PICKING_UP:
                                 if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING] ==\
                                         self._getRoom(message_data[1], state):
-                                    agents[member_index][1] += truth
+                                    agents[member_index][1] += truth_reward
                                 else:
-                                    agents[member_index][1] -= lie
+                                    agents[member_index][1] -= lie_cost
 
                             # Trust: For DROPPED check if agent picked up that block before
                             if message_type == MessageType.DROPPED:
                                 if MessageType.PICKING_UP in self._log[member] and message_data[0] in\
                                         [block for block, location in self._log[member][MessageType.PICKING_UP]]:
-                                    agents[member_index][1] += truth
+                                    agents[member_index][1] += truth_reward
                                 else:
-                                    agents[member_index][1] -= lie
+                                    agents[member_index][1] -= lie_cost
 
                         # All the other messages have max 1 consecutive type of message
                         else:
@@ -324,17 +333,17 @@ class BaseLineAgent(BW4TBrain):
                                                    if 'class_inheritance' in door and 'Door' in door[
                                                    'class_inheritance'] and door['is_open']]
                                 if message_data in open_doors_room:
-                                    agents[member_index][1] += truth
+                                    agents[member_index][1] += truth_reward
                                 else:
-                                    agents[member_index][1] -= lie
+                                    agents[member_index][1] -= lie_cost
 
                             # Trust: For SEARCHING check if agent was moving to that room
                             if message_type == MessageType.SEARCHING:
                                 if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING]\
                                         == message_data:
-                                    agents[member_index][1] += truth
+                                    agents[member_index][1] += truth_reward
                                 else:
-                                    agents[member_index][1] -= lie
+                                    agents[member_index][1] -= lie_cost
                     else:
                         self._log[member] = {}
                         self._log[member][message_type] = message_data

@@ -534,7 +534,7 @@ class Liar(BaseLineAgent):
                 waypoints.append((door['location']))
         self._navigator.add_waypoints(waypoints)
     
-    def validateBlock(self, location, color: str, shape: int): 
+    def _validateBlock(self, location, color: str, shape: int):
         possible_blocks = []
         for block in self.knownBlocks.values():
             if (block['location'] == location):
