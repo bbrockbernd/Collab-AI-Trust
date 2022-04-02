@@ -365,7 +365,7 @@ class Strong(BaseLineAgent):
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
         # Randomly pick a closed door
-        self._door = self.roomsToExplore[0]
+        self._door = random.choice(self.roomsToExplore)
         self.roomsToExplore.remove(self._door)
         doorLoc = self._door['location']
         # Location in front of door is south from door
