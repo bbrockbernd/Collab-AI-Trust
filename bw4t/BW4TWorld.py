@@ -17,10 +17,15 @@ from bw4t.BW4TLogger import BW4TLogger
 from bw4t.BW4THumanBrain import HumanBrain
 
 def createwordsettings (): 
+    block_per_room =  np.random.randint(2,3) #2
+    seed = np.random.randint(1,100) #91
+    nr_rooms = np.random.randint(40/block_per_room, 150/block_per_room) #35
+    rooms_per_row =  np.random.randint(9/block_per_room,30/block_per_room) #14
+    print("starting world with: " + str({"block_per_room": block_per_room, "seed": seed, "nr_rooms": nr_rooms, "rooms_per_row": rooms_per_row}))
     return {
     'deadline': 3000, # Ticks after which world terminates anyway 
-    'tick_duration': 0.1, # Set to 0 for fastest possible runs.
-    'random_seed': np.random.randint(1,100),
+    'tick_duration': 0.000001, # Set to 0 for fastest possible runs.
+    'random_seed': seed,
     'verbose': False,
     'matrx_paused':False,
     'run_matrx_api':True, # If you want to allow web connection
@@ -37,9 +42,9 @@ def createwordsettings ():
         'f': CloseDoorAction.__name__,
     },
     'room_size' : (6,4),  # width, height
-    'nr_rooms' : np.random.randint(3, 40), # total number of rooms.
-    'rooms_per_row': np.random.randint(3,10), #number of rooms per row.
-    'average_blocks_per_room': 3,
+    'nr_rooms' : nr_rooms, # total number of rooms.
+    'rooms_per_row': rooms_per_row, #number of rooms per row.
+    'average_blocks_per_room': block_per_room,
     'block_shapes': [0, 1, 2], # possible shapes of the blocks
     'block_colors': ['#0008ff', '#ff1500', '#0dff00'], #possible colors of blocks
     'room_colors': ['#0008ff', '#ff1500', '#0dff00'],
