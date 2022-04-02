@@ -149,6 +149,7 @@ class Lazy(BaseLineAgent):
         self._location = (0, 0)
         self._current_door_id = ""
         self._inventory = None
+        self._isCarrying = False
         self._checked_locations = []
         self._droppoint = None
 
@@ -245,6 +246,10 @@ class Lazy(BaseLineAgent):
         return self.next(Phase.MOVING)
 
     def moving(self) -> (str, {}):
+        if self._mode == Mode.GOAL and self._inventory is not None and not self._isCarrying:
+            self._inventory = None
+            return self.next(Phase.WHAT_TO_DO)
+
         self._state_tracker.update(self._current_state)
         action = self._navigator.get_move_action(self._state_tracker)
         room_id = self._world.am_i_at_door((self._location[0],
@@ -349,6 +354,8 @@ class Lazy(BaseLineAgent):
         super()._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
 
         self._location = self._current_state.get_self()['location']
+
+        self._isCarrying = len(state[self.agent_id]['is_carrying']) > 0
 
         if self._phase != Phase.INITIALIZE:
             for room in state.get_all_room_names():
