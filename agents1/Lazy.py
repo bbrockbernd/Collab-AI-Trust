@@ -42,6 +42,7 @@ class MyBlock:
     def __init__(self, block_obj: {}, room: str, isGoal=False):
         self.shape = block_obj['visualization']['shape']
         self.color = block_obj['visualization']['colour']
+        self.size = block_obj['visualization']['size']
         self.isGoal = isGoal
         self.location = block_obj['location']
         self.dropPoint = None
@@ -49,7 +50,11 @@ class MyBlock:
         self.room = room
         self.myid = str(self.shape) + self.color
         self.obj_id = block_obj['obj_id']
-        self.visualization = block_obj['visualization']
+        self.visualization = {
+            "size": self.size,
+            "shape": self.shape,
+            "colour": self.color
+        }
 
 
     def set_drop_point(self, dp: MyDropPoint):
@@ -187,11 +192,9 @@ class Lazy(BaseLineAgent):
             return
 
         if len(self._world.getGoals()) > 0 and self._phase is not Phase.EXPLORE_ROOM:
-            super()._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
         if self._counter > 7 and self._quitting and self._phase is not Phase.EXPLORE_ROOM:
-            super()._sendMessage('Quitting current task', self.agent_id)
             self._phase = Phase.WHAT_TO_DO
 
 
@@ -222,6 +225,9 @@ class Lazy(BaseLineAgent):
             print("Going to Goal")
         else:
             self._mode = Mode.EXPLORING
+            if len(self._world.getUnexploredRooms()) == 0:
+                for room in self._world.rooms:
+                    self._world.getRoom(room).explored = False
             room = random.choice(self._world.getUnexploredRooms())
             self._destination = room.doorLoc
             self._destination = (self._destination[0], self._destination[1] + 1)
@@ -353,6 +359,8 @@ class Lazy(BaseLineAgent):
 
         for agent in receivedMessages.keys():
             for msg in receivedMessages[agent]:
+                if not self._trustInAgent(agent):
+                    continue
                 message = msg.split()
                 if len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
                     visualization_string = "{" + msg.split('{')[1].split('}')[0] + "}"
@@ -368,9 +376,6 @@ class Lazy(BaseLineAgent):
                         if not dp.completed:
                             break
 
-
-
-
         self.what_am_i_doing()
 
         return self.next(self._phase)
@@ -382,4 +387,3 @@ class Lazy(BaseLineAgent):
             if block.location == location and block.color == color and block.shape == shape:
                 return 1
         return -1
-
