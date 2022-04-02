@@ -204,8 +204,10 @@ class BaseLineAgent(BW4TBrain):
             elif len(message) > 4 and ' '.join(message[:4]) == 'Picking up goal block':
                 return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
                                             self._getLocationFromMessage(received)]
-            elif len(message) > 3 and ' '.join(message[:3]) == 'found block by':
+            elif len(message) == 5 and ' '.join(message[:3]) == 'found block by':
                 return MessageType.FOUND_CONFIRMATION, [message[3], message[4]]
+            elif len(message) == 6 and ' '.join(message[:3]) == 'trust belief of':
+                return MessageType.TRUST_BELIEF, [message[3], float(message[5])]
             else:
                 return MessageType.INVALID, []
         except Exception:
@@ -351,6 +353,13 @@ class BaseLineAgent(BW4TBrain):
                             except ValueError:
                                 pass
 
+                        elif message_type == MessageType.TRUST_BELIEF:
+                            try:
+                                agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
+                                agents[agent_index][3] = (agents[agent_index][3] + message_data[1]) / 2
+                            except ValueError:
+                                pass
+
                         # All the other messages have max 1 consecutive type of message
                         else:
                             # Store message
@@ -383,5 +392,5 @@ class BaseLineAgent(BW4TBrain):
             memory.writerow(params)
             memory.writerows(agents)
 
-        self.trust_beliefs = self._computeTrustBeliefs(agents)
+        self._trustBeliefs = self._computeTrustBeliefs(agents)
 
