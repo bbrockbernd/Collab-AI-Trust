@@ -372,6 +372,17 @@ class Colorblind(BaseLineAgent):
         return (block1['visualization']['shape'] == block2['visualization']['shape'] and
                     block1['visualization']['size'] == block2['visualization']['size'])
     
+    def _validateBlock(self, location, color: str, shape: int): 
+        possible_blocks = []
+        for block in self.knownBlocks.values():
+            if (block['location'] == location):
+                possible_blocks.append(block)
+                if block['visualization']['shape'] == shape: 
+                    return 1
+        if len(possible_blocks) == 0:
+            return 0
+        return -1
+    
     def _roomExplorationWayPoints(self, state:State):
         self._navigator.reset_full()
         door = self._door
