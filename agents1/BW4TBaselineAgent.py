@@ -138,7 +138,7 @@ class BaseLineAgent(BW4TBrain):
     Direct Experiences influence more than Indirect experience and Reputation
     '''
     def _computeTrustBelief(self, direct_exp, indirect_exp, rep):
-        return (4 * float(direct_exp) + float(indirect_exp) + float(rep)) / 6
+        return (3 * float(direct_exp) + float(indirect_exp) + float(rep)) / 5
 
     '''
     Returns True if an agent can be trusted
@@ -350,14 +350,14 @@ class BaseLineAgent(BW4TBrain):
                                     agents[agent_index][2] += truth_reward
                                 elif message_data[1] == 'denied':
                                     agents[agent_index][2] -= lie_cost
-                            except ValueError:
+                            except ValueError:  # This happens if message is about itself
                                 pass
 
                         elif message_type == MessageType.TRUST_BELIEF:
                             try:
                                 agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
                                 agents[agent_index][3] = (agents[agent_index][3] + message_data[1]) / 2
-                            except ValueError:
+                            except ValueError:  # This happens if message is about itself
                                 pass
 
                         # All the other messages have max 1 consecutive type of message
