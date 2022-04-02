@@ -12,10 +12,12 @@ from matrx.actions.door_actions import OpenDoorAction
 from matrx.actions.object_actions import GrabObject, DropObject
 from matrx.messages.message import Message
 
+
 class Phase(enum.Enum):
-    PLAN_PATH_TO_CLOSED_DOOR=1,
-    FOLLOW_PATH_TO_CLOSED_DOOR=2,
-    OPEN_DOOR=3
+    PLAN_PATH_TO_CLOSED_DOOR = 1,
+    FOLLOW_PATH_TO_CLOSED_DOOR = 2,
+    OPEN_DOOR = 3
+
 
 class MessageType(enum.Enum):
     MOVING = 1
@@ -28,66 +30,68 @@ class MessageType(enum.Enum):
     TRUST_BELIEF = 8
     INVALID = 9
 
+
 class BaseLineAgent(BW4TBrain):
 
-    def __init__(self, settings:Dict[str,object]):
+    def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
         self._log = {}  # Memory of recent actions by other agents
-        self._actionHistory = {MessageType.PICKING_UP: [], MessageType.DROPPED: []}  # History of Dropped and Picked Up blocks
+        self._actionHistory = {MessageType.PICKING_UP: [],
+                               MessageType.DROPPED: []}  # History of Dropped and Picked Up blocks
         self._trustBeliefs = {}  # Trust Beliefs
 
     def initialize(self):
         super().initialize()
         self._state_tracker = StateTracker(agent_id=self.agent_id)
-        self._navigator = Navigator(agent_id=self.agent_id, 
-            action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
+        self._navigator = Navigator(agent_id=self.agent_id,
+                                    action_set=self.action_set, algorithm=Navigator.A_STAR_ALGORITHM)
 
     def filter_bw4t_observations(self, state):
         return state
 
-    def decide_on_bw4t_action(self, state:State):
+    def decide_on_bw4t_action(self, state: State):
         agent_name = state[self.agent_id]['obj_id']
         # Add team members
         for member in state['World']['team_members']:
-            if member!=agent_name and member not in self._teamMembers:
+            if member != agent_name and member not in self._teamMembers:
                 self._teamMembers.append(member)
         # Process messages from team members
         receivedMessages = self._processMessages(self._teamMembers)
         # Update trust beliefs for team members
         self._trustBelief(agent_name, self._teamMembers, receivedMessages, state)
-        
+
         while True:
-            if Phase.PLAN_PATH_TO_CLOSED_DOOR==self._phase:
+            if Phase.PLAN_PATH_TO_CLOSED_DOOR == self._phase:
                 self._navigator.reset_full()
                 closedDoors = [door for door in state.values()
-                    if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door['is_open']]
-                if len(closedDoors)==0:
+                               if 'class_inheritance' in door and 'Door' in door['class_inheritance'] and not door[
+                        'is_open']]
+                if len(closedDoors) == 0:
                     return None, {}
                 # Randomly pick a closed door
                 self._door = random.choice(closedDoors)
                 doorLoc = self._door['location']
                 # Location in front of door is south from door
-                doorLoc = doorLoc[0],doorLoc[1]+1
+                doorLoc = doorLoc[0], doorLoc[1] + 1
                 # Send message of current action
                 self._sendMessage('Moving to ' + self._door['room_name'], agent_name)
                 self._navigator.add_waypoints([doorLoc])
-                self._phase=Phase.FOLLOW_PATH_TO_CLOSED_DOOR
+                self._phase = Phase.FOLLOW_PATH_TO_CLOSED_DOOR
 
-            if Phase.FOLLOW_PATH_TO_CLOSED_DOOR==self._phase:
+            if Phase.FOLLOW_PATH_TO_CLOSED_DOOR == self._phase:
                 self._state_tracker.update(state)
                 # Follow path to door
                 action = self._navigator.get_move_action(self._state_tracker)
-                if action!=None:
-                    return action, {}   
-                self._phase=Phase.OPEN_DOOR
+                if action != None:
+                    return action, {}
+                self._phase = Phase.OPEN_DOOR
 
-            if Phase.OPEN_DOOR==self._phase:
-                self._phase=Phase.PLAN_PATH_TO_CLOSED_DOOR
+            if Phase.OPEN_DOOR == self._phase:
+                self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
                 # Open door
-                return OpenDoorAction.__name__, {'object_id':self._door['obj_id']}
-    
+                return OpenDoorAction.__name__, {'object_id': self._door['obj_id']}
 
     def _sendMessage(self, mssg, sender):
         '''
@@ -114,6 +118,7 @@ class BaseLineAgent(BW4TBrain):
     '''
     Find the room (if any) based on a given location
     '''
+
     def _getRoom(self, location, state: State):
         rooms = state.get_all_room_names()
         for room in rooms:
@@ -127,6 +132,7 @@ class BaseLineAgent(BW4TBrain):
     Compute the trust belief value based on trust and reputation for all given agents
     Direct Experiences influence more than Indirect experience and Reputation
     '''
+
     def _computeTrustBeliefs(self, agents):
         trust_beliefs = {}
         for [agent, direct_exp, indirect_exp, rep] in agents:
@@ -137,12 +143,14 @@ class BaseLineAgent(BW4TBrain):
     Compute the trust belief value based on trust and reputation
     Direct Experiences influence more than Indirect experience and Reputation
     '''
+
     def _computeTrustBelief(self, direct_exp, indirect_exp, rep):
         return (3 * float(direct_exp) + float(indirect_exp) + float(rep)) / 5
 
     '''
     Returns True if an agent can be trusted
     '''
+
     def _trustInAgent(self, agent_id: str) -> bool:
         if self._trustBeliefs[agent_id] < 0:
             return False
@@ -152,12 +160,14 @@ class BaseLineAgent(BW4TBrain):
     '''
     Has to be overwritten by child classes
     '''
+
     def _validateBlock(self, location: (int, int), color: str, shape: int) -> int:
         return 0
 
     '''
     Returns the history of data received from PICKING_UP and DROPPED messages
     '''
+
     def _blockActions(self, action: MessageType) -> List[List]:
         if action == MessageType.DROPPED:
             return self._actionHistory[MessageType.DROPPED]
@@ -169,13 +179,15 @@ class BaseLineAgent(BW4TBrain):
     '''
     Transform text ending with "location (x, y)" to a tupple (x,y)
     '''
+
     def _getLocationFromMessage(self, message):
         loc = message[message.find("location ("):-1]
-        return (int(loc[loc.find("(")+1:loc.find(',')]), int(loc[loc.find(",")+2:]))
-    
+        return (int(loc[loc.find("(") + 1:loc.find(',')]), int(loc[loc.find(",") + 2:]))
+
     '''
     Transform text message into data
     '''
+
     def _normalizeMessage(self, received):
         """
         Communication protocol:
@@ -196,14 +208,17 @@ class BaseLineAgent(BW4TBrain):
             elif len(message) == 3 and ' '.join(message[:2]) == 'Searching through':
                 return MessageType.SEARCHING, message[2]
             elif len(message) > 3 and ' '.join(message[:3]) == 'found goal block':
-                return MessageType.FOUND, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                            self._getLocationFromMessage(received)]
+                return MessageType.FOUND, [
+                    json.loads(received[received.find('{'):received.find('}') + 1].replace("'", '"')),
+                    self._getLocationFromMessage(received)]
             elif len(message) > 3 and ' '.join(message[:3]) == 'Dropped goal block':
-                return MessageType.DROPPED, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                            self._getLocationFromMessage(received)]
+                return MessageType.DROPPED, [
+                    json.loads(received[received.find('{'):received.find('}') + 1].replace("'", '"')),
+                    self._getLocationFromMessage(received)]
             elif len(message) > 4 and ' '.join(message[:4]) == 'Picking up goal block':
-                return MessageType.PICKING_UP, [json.loads(received[received.find('{'):received.find('}')+1].replace("'", '"')),
-                                            self._getLocationFromMessage(received)]
+                return MessageType.PICKING_UP, [
+                    json.loads(received[received.find('{'):received.find('}') + 1].replace("'", '"')),
+                    self._getLocationFromMessage(received)]
             elif len(message) == 5 and ' '.join(message[:3]) == 'found block by':
                 return MessageType.FOUND_CONFIRMATION, [message[3], message[4]]
             elif len(message) == 6 and ' '.join(message[:3]) == 'trust belief of':
@@ -217,6 +232,7 @@ class BaseLineAgent(BW4TBrain):
     '''
     Verify that the same message is not processed twice
     '''
+
     def _checkIfMessageAlreadyRecieved(self, member, message_type, message_data):
         if member in self._log:
             if message_type in self._log[member]:
@@ -227,6 +243,7 @@ class BaseLineAgent(BW4TBrain):
     '''
     Trust mechanism (same) for all Agents
     '''
+
     def _trustBelief(self, name, members, received, state: State):
         # Read (or initialize) memory file
         default = 0.0
@@ -282,11 +299,14 @@ class BaseLineAgent(BW4TBrain):
                                 self._log[member][message_type] = [message_data]
 
                             # Trust: Check if blocks FOUND are in the room the agent said they were SEARCHING
-                            if MessageType.SEARCHING in self._log[member] and self._log[member][MessageType.SEARCHING]\
-                                    == self._getRoom(message_data[1], state):
-                                agents[member_index][1] += truth_reward
-                            else:
-                                agents[member_index][1] -= lie_cost
+                            room = self._getRoom(message_data[1], state)
+                            if room != '':
+                                if MessageType.SEARCHING in self._log[member] and self._log[member][
+                                    MessageType.SEARCHING] \
+                                        == room:
+                                    agents[member_index][1] += truth_reward
+                                else:
+                                    agents[member_index][1] -= lie_cost
 
                             # Trust: Check if FOUND block by other matches what you know
                             block_confirmation = self._validateBlock(message_data[1],
@@ -323,11 +343,13 @@ class BaseLineAgent(BW4TBrain):
 
                             # Trust: For PICKING_UP check if agent moved to that room beforehand
                             if message_type == MessageType.PICKING_UP:
-                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING] ==\
-                                        self._getRoom(message_data[1], state):
-                                    agents[member_index][1] += truth_reward
-                                else:
-                                    agents[member_index][1] -= lie_cost
+                                room = self._getRoom(message_data[1], state)
+                                if room != '':
+                                    if MessageType.MOVING in self._log[member] and \
+                                            self._log[member][MessageType.MOVING] == room:
+                                        agents[member_index][1] += truth_reward
+                                    else:
+                                        agents[member_index][1] -= lie_cost
 
                                 # Reputation Broadcast
                                 trust_b = self._computeTrustBelief(agents[member_index][1], agents[member_index][2],
@@ -336,7 +358,7 @@ class BaseLineAgent(BW4TBrain):
 
                             # Trust: For DROPPED check if agent picked up that block before
                             if message_type == MessageType.DROPPED:
-                                if MessageType.PICKING_UP in self._log[member] and message_data[0] in\
+                                if MessageType.PICKING_UP in self._log[member] and message_data[0] in \
                                         [block for block, location in self._log[member][MessageType.PICKING_UP]]:
                                     agents[member_index][1] += truth_reward
                                 else:
@@ -345,7 +367,8 @@ class BaseLineAgent(BW4TBrain):
                         # Indirect Experience
                         elif message_type == MessageType.FOUND_CONFIRMATION:
                             try:
-                                agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
+                                agent_index = [name for name, direct, indirect, reputation in agents].index(
+                                    message_data[0])
                                 if message_data[1] == 'approved':
                                     agents[agent_index][2] += truth_reward
                                 elif message_data[1] == 'denied':
@@ -355,7 +378,8 @@ class BaseLineAgent(BW4TBrain):
 
                         elif message_type == MessageType.TRUST_BELIEF:
                             try:
-                                agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
+                                agent_index = [name for name, direct, indirect, reputation in agents].index(
+                                    message_data[0])
                                 agents[agent_index][3] = (agents[agent_index][3] + message_data[1]) / 2
                             except ValueError:  # This happens if message is about itself
                                 pass
@@ -369,7 +393,7 @@ class BaseLineAgent(BW4TBrain):
                             if message_type == MessageType.OPENING:
                                 open_doors_room = [door['room_name'] for door in state.values()
                                                    if 'class_inheritance' in door and 'Door' in door[
-                                                   'class_inheritance'] and door['is_open']]
+                                                       'class_inheritance'] and door['is_open']]
                                 if message_data in open_doors_room:
                                     agents[member_index][1] += truth_reward
                                 else:
@@ -377,7 +401,7 @@ class BaseLineAgent(BW4TBrain):
 
                             # Trust: For SEARCHING check if agent was moving to that room
                             if message_type == MessageType.SEARCHING:
-                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING]\
+                                if MessageType.MOVING in self._log[member] and self._log[member][MessageType.MOVING] \
                                         == message_data:
                                     agents[member_index][1] += truth_reward
                                 else:
@@ -393,4 +417,3 @@ class BaseLineAgent(BW4TBrain):
             memory.writerows(agents)
 
         self._trustBeliefs = self._computeTrustBeliefs(agents)
-
