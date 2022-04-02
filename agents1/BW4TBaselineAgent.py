@@ -349,7 +349,7 @@ class BaseLineAgent(BW4TBrain):
                                 if message_data[1] == 'approved':
                                     agents[agent_index][2] += truth_reward
                                 elif message_data[1] == 'denied':
-                                    agents[agent_index][2] += lie_cost
+                                    agents[agent_index][2] -= lie_cost
                             except ValueError:
                                 pass
 
