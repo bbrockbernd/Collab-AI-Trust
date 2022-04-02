@@ -1,7 +1,7 @@
 
 from typing import Dict
 import enum, random
-from agents1.BW4TBaselineAgent import BaseLineAgent
+from agents1.BW4TBaselineAgent import BaseLineAgent, MessageType
 from matrx.agents.agent_utils.state import State
 from matrx.agents.agent_utils.navigator import Navigator
 from matrx.agents.agent_utils.state_tracker import StateTracker
@@ -323,19 +323,34 @@ class Liar(BaseLineAgent):
         self._navigator.add_waypoints([doorLoc])  
         
     def getBlockToGrab(self):
+        actions = super()._blockActions(MessageType.PICKING_UP)
+        possibleCollectedBlocks = []
+        ids = list(self.knownBlocks.keys())
+        ids.sort(reverse=True)
         for _collectBlock in self.collectBlocks.values():
             if not _collectBlock['is_delivered_by_me'] or not _collectBlock['is_delivered_confirmed']:
                 collectBlock = _collectBlock
                 
                 if collectBlock is None:
                     return None
-                ids = list(self.knownBlocks.keys())
-                ids.sort(reverse=True)
                 for id in ids:
                     block = self.knownBlocks[id]
                     if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block):
-                        self.blockToGrab = block
-                        return block
+                        possibleRelevantActions = []
+                        for action in actions:
+                            print(action[2], self.agent_id)
+                            if block['location'] == action[1] and super()._trustInAgent(agent_id= action[2]):
+                                possibleRelevantActions.append(action)
+                                break
+                        if len(possibleRelevantActions) > 0:
+                            possibleCollectedBlocks.append(block)
+                        else:
+                            self.blockToGrab = block
+                            return block
+                            
+                if(len(possibleCollectedBlocks) > 0):
+                    self.blockToGrab = possibleCollectedBlocks[-1]
+                    return  possibleCollectedBlocks[-1]
                 return None
                     
     def _possibleToPlanPathToGoalBlock(self):
@@ -430,9 +445,11 @@ class Liar(BaseLineAgent):
         block = self.blockToGrab
         location = self.blockToGrab['location']
         if lie and len(self.knownBlocks) > 1 and len([block for block_id in self.knownBlocks
-            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)]) > 0:
+            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab) and block['isGoalBlock']]) > 0:
             block = random.choice([block for block_id in self.knownBlocks
-            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab)])
+            if not self.sameVizuals(self.knownBlocks[block_id], self.blockToGrab) and block['isGoalBlock']])
+            location = block['location']                
+            
         elif lie:
             location = random.choice([otherBlock for otherBlock in self.knownBlocks.values()])['location']
         msg = "Picking up goal block " + str({"size":  block['visualization']['size'], 
@@ -460,7 +477,7 @@ class Liar(BaseLineAgent):
                                                         , "colour": block['visualization']['colour']}) + " at drop location " + str(location)        
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])      
                 
-    def updateBlocks(self, block):
+    def updateBlock(self, block):
         obj_id = block['obj_id']
         if obj_id in self.knownBlocks.keys():
             self.knownBlocks[obj_id]['location'] = block['location']
@@ -482,7 +499,7 @@ class Liar(BaseLineAgent):
     def updateBlocks(self, state:State):
         for block in self.detectBlocksAround(state):
             self.addNewBlock(state, block)
-            self.updateBlocks(block)
+            self.updateBlock(block)
                                
             
     def checkGoalBlockPresent(self, state:State):
