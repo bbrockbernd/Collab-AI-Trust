@@ -31,7 +31,7 @@ class Liar(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
-        self._phase = Phase.SET_UP_VARIABLES
+        self._phase=Phase.SET_UP_VARIABLES
         self._teamMembers = []
         
 
@@ -155,11 +155,8 @@ class Liar(BaseLineAgent):
                 if self.blockToGrab['obj_id'] not in ids:
                     #BLOCK NOT ON LAST KNOWN LOCATION
                     del self.knownBlocks[self.blockToGrab['obj_id']]
-                    if len(self.roomsToExplore) > 0:
-                        self._phase = Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
-                        continue
-                    self._phase = Phase.PLAN_TO_GOAL_BLOCK
-                    continue       
+                    self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
+                    continue
                 
                 self._sendGrabBlockMessage(state)
                 self._phase=Phase.PLAN_TO_DROP_ZONE
@@ -169,7 +166,7 @@ class Liar(BaseLineAgent):
                 self.updateBlocks(state)
                 if(len(self.agent_properties['is_carrying']) == 0):
                     #NO BLOCKS BRAPPED
-                    self._phase = Phase.PLAN_TO_GOAL_BLOCK
+                    self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
                     continue
                 
                 self._planPathToDropOff()
@@ -177,7 +174,6 @@ class Liar(BaseLineAgent):
             
             if Phase.FOLLOW_PATH_TO_DROP_ZONE==self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
@@ -189,7 +185,6 @@ class Liar(BaseLineAgent):
             
             if Phase.PLAN_PATH_TO_VERIFY_COLLECTION==self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 self._navigator.reset_full()
                 locations = []
                 for collectBlock in self.collectBlocks.values():                 
@@ -199,7 +194,6 @@ class Liar(BaseLineAgent):
                 
             if Phase.FOLLOW_PATH_TO_VERIFY_COLLECTION==self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 self._state_tracker.update(state)
                 action = self._navigator.get_move_action(self._state_tracker)
                 if action!=None:
@@ -207,14 +201,12 @@ class Liar(BaseLineAgent):
                 
                 if self.checkAllCollectBlocksPresent():
                     self._phase=Phase.PLAN_PATH_TO_REMOVE_ALL_BLOCKS
-                elif len (self.roomsToExplore) > 0:
-                    self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
                 else:
-                    self._phase=Phase.PLAN_TO_GOAL_BLOCK
+                    self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
+
                     
             if Phase.PLAN_PATH_TO_REMOVE_ALL_BLOCKS==self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 id = list(self.collectBlocks.keys())
                 id.sort(reverse=True)
                 (x,y) = self.collectBlocks[id[0]]['location']
@@ -223,11 +215,10 @@ class Liar(BaseLineAgent):
                 self._navigator.reset_full()
                 self._navigator.add_waypoints([location])
                 
-                self._phase = Phase.FOLLOW_PATH_TO_REMOVE_ALL_BLOCKS
+                self._phase=Phase.FOLLOW_PATH_TO_REMOVE_ALL_BLOCKS
                 
             if Phase.FOLLOW_PATH_TO_REMOVE_ALL_BLOCKS==self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 
                 self._state_tracker.update(state)
                 
@@ -235,17 +226,17 @@ class Liar(BaseLineAgent):
                 
                 if action!=None:
                     return action, {}   
-                self._phase = Phase.REMOVE_ALL_BLOCKS
+                if random.random() < 0.9:
+                    return None, {}
+                self._phase=Phase.REMOVE_ALL_BLOCKS
             
             if Phase.REMOVE_ALL_BLOCKS == self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 (x,y) = state[self.agent_id]['location']
                 location = (x+1,y)
                 blocks = self.detectBlocksAround(state)
 
                 carrying = self.agent_properties['is_carrying']
-
                 if len(carrying) > 0:
                     return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] } 
                 for block in blocks:
@@ -256,15 +247,14 @@ class Liar(BaseLineAgent):
                 id.sort()
                 (x,y) = self.collectBlocks[id[0]]['location']
                 if not state[self.agent_id]['location'] == (x-1,y):
-                    self._phase = Phase.REMOVE_ALL_BLOCKS
+                    self._phase=Phase.REMOVE_ALL_BLOCKS
                     return 'MoveSouth', {}   
                 else:
-                    self._phase = Phase.REPLACE_ALL_BLOCKS
+                    self._phase=Phase.REPLACE_ALL_BLOCKS
                     return 'MoveEast', {}   
                 
             if Phase.REPLACE_ALL_BLOCKS == self._phase:
                 self.updateBlocks(state)
-                self.updateCollect(state)
                 (x,y) = state[self.agent_id]['location']
                 
                 blocks = self.detectBlocksAround(state)
@@ -281,7 +271,7 @@ class Liar(BaseLineAgent):
                                 return "GrabObject", {'object_id':block['obj_id'] } 
                     if collectBlock['location'] == (x,y) and collectBlock['is_delivered_confirmed']:
                         return "MoveNorth", {}
-                self._phase = Phase.PLAN_TO_GOAL_BLOCK 
+                self._phase=Phase.PLAN_TO_GOAL_BLOCK 
                 
                     
     def checkAllCollectBlocksPresent(self):
@@ -486,6 +476,7 @@ class Liar(BaseLineAgent):
                         self.knownBlocks[obj_id]['is_delivered'] = True
                         self.knownBlocks[obj_id]['is_delivered_confirmed'] = True
                         self.collectBlocks[collectBlock['obj_id']]['is_delivered_confirmed'] = True
+                        break
                     else:
                         self.knownBlocks[obj_id]['is_delivered'] = False
                         self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
@@ -496,6 +487,7 @@ class Liar(BaseLineAgent):
     Update existing blocks
     '''
     def updateBlocks(self, state:State):
+        self.updateCollect(state)
         for block in self.detectBlocksAround(state):
             self.addNewBlock(state, block)
             self.updateBlock(block)
@@ -535,7 +527,6 @@ class Liar(BaseLineAgent):
         waypoints = [(room[1][0]-1,room[1][1])]
         currentX = room[1][0]-1
         currentY = room[1][1]
-        self._phase=Phase.EXPLORE_ROOM
         while currentX > room[0][0]+1:
             if currentY > room[0][1]:
                 waypoints.append((currentX,room[0][1]))
