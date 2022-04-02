@@ -25,7 +25,8 @@ class MessageType(enum.Enum):
     PICKING_UP = 5
     DROPPED = 6
     FOUND_CONFIRMATION = 7
-    INVALID = 8
+    TRUST_BELIEF = 8
+    INVALID = 9
 
 class BaseLineAgent(BW4TBrain):
 
@@ -34,7 +35,7 @@ class BaseLineAgent(BW4TBrain):
         self._phase = Phase.PLAN_PATH_TO_CLOSED_DOOR
         self._teamMembers = []
         self._log = {}  # Memory of recent actions by other agents
-        self._actionHistory = {MessageType.PICKING_UP : [], MessageType.DROPPED : []}  # History of Dropped and Picked Up blocks
+        self._actionHistory = {MessageType.PICKING_UP: [], MessageType.DROPPED: []}  # History of Dropped and Picked Up blocks
         self._trustBeliefs = {}  # Trust Beliefs
 
     def initialize(self):
@@ -123,14 +124,21 @@ class BaseLineAgent(BW4TBrain):
         return ''
 
     '''
-    Compute the trust belief value based on trust and reputation
-    Direct Experiences influence more than Reputation
+    Compute the trust belief value based on trust and reputation for all given agents
+    Direct Experiences influence more than Indirect experience and Reputation
     '''
     def _computeTrustBeliefs(self, agents):
         trust_beliefs = {}
-        for [agent, direct_experience, indirect_experience, rep] in agents:
-            trust_beliefs[agent] = (4 * float(direct_experience) + float(indirect_experience) + float(rep)) / 6
+        for [agent, direct_exp, indirect_exp, rep] in agents:
+            trust_beliefs[agent] = self._computeTrustBelief(direct_exp, indirect_exp, rep)
         return trust_beliefs
+
+    '''
+    Compute the trust belief value based on trust and reputation
+    Direct Experiences influence more than Indirect experience and Reputation
+    '''
+    def _computeTrustBelief(self, direct_exp, indirect_exp, rep):
+        return (4 * float(direct_exp) + float(indirect_exp) + float(rep)) / 6
 
     '''
     Returns True if an agent can be trusted
@@ -221,7 +229,7 @@ class BaseLineAgent(BW4TBrain):
         # Read (or initialize) memory file
         default = 0.0
         truth_reward = 0.1
-        lie_cost = 0.5
+        lie_cost = 0.4
         filename = name + '_memory.csv'
         params = ['Agent', 'Direct Experiences', 'Indirect Experiences', 'Reputation']
         agents = []
@@ -247,6 +255,9 @@ class BaseLineAgent(BW4TBrain):
         agents = [[agent[0], float(agent[1]), float(agent[2]), float(agent[3])] for agent in agents]
         # Process received messages
         for member in received.keys():
+            if member == name:
+                print("PROCESSING OWN MESSAGE!")
+                continue
             # Agent index for trust modification
             member_index = [name for name, direct, indirect, reputation in agents].index(member)
 
@@ -316,6 +327,11 @@ class BaseLineAgent(BW4TBrain):
                                 else:
                                     agents[member_index][1] -= lie_cost
 
+                                # Reputation Broadcast
+                                trust_b = self._computeTrustBelief(agents[member_index][1], agents[member_index][2],
+                                                                   agents[member_index][3])
+                                self._sendMessage('Trust belief of ' + member + ' : ' + str(trust_b), name)
+
                             # Trust: For DROPPED check if agent picked up that block before
                             if message_type == MessageType.DROPPED:
                                 if MessageType.PICKING_UP in self._log[member] and message_data[0] in\
@@ -326,11 +342,14 @@ class BaseLineAgent(BW4TBrain):
 
                         # Indirect Experience
                         elif message_type == MessageType.FOUND_CONFIRMATION:
-                            agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
-                            if message_data[1] == 'approved':
-                                agents[agent_index][2] += truth_reward
-                            elif message_data[1] == 'denied':
-                                agents[agent_index][2] += lie_cost
+                            try:
+                                agent_index = [name for name, direct, indirect, reputation in agents].index(message_data[0])
+                                if message_data[1] == 'approved':
+                                    agents[agent_index][2] += truth_reward
+                                elif message_data[1] == 'denied':
+                                    agents[agent_index][2] += lie_cost
+                            except ValueError:
+                                pass
 
                         # All the other messages have max 1 consecutive type of message
                         else:
@@ -364,7 +383,5 @@ class BaseLineAgent(BW4TBrain):
             memory.writerow(params)
             memory.writerows(agents)
 
-        trust_beliefs = self._computeTrustBeliefs(agents)
-
-        return trust_beliefs
+        self.trust_beliefs = self._computeTrustBeliefs(agents)
 
