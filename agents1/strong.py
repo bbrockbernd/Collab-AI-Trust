@@ -560,7 +560,7 @@ class Strong(BaseLineAgent):
         for block in self.knownBlocks.values():
             if (block['location'] == location):
                 possible_blocks.append(block)
-                if color is "?" and block['visualization']['shape'] == shape: 
+                if color == "?" and block['visualization']['shape'] == shape: 
                     return 1
                 elif (block['visualization']['colour'] == color and 
                     block['visualization']['shape'] == shape):
