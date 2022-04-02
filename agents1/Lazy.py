@@ -223,7 +223,6 @@ class Lazy(BaseLineAgent):
             self._mode = Mode.GOAL
             self._destination = self._world.getGoals()[0].location
             self._dest_id = self._world.getGoals()[0].obj_id
-            print("Going to Goal")
         else:
             self._mode = Mode.EXPLORING
             if len(self._world.getUnexploredRooms()) == 0:
