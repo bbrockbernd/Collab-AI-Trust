@@ -391,6 +391,6 @@ class Lazy(BaseLineAgent):
         if location not in self._checked_locations:
             return 0
         for block in self._world.blocks.values():
-            if block.location == location and block.color == color and block.shape == shape:
+            if block.location == location and (block.color == color or color == "?") and block.shape == shape:
                 return 1
         return -1
