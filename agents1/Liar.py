@@ -238,9 +238,11 @@ class Liar(BaseLineAgent):
 
                 carrying = self.agent_properties['is_carrying']
                 if len(carrying) > 0:
+                    self.msgAboutDropLocation(state)
                     return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] } 
                 for block in blocks:
                     if block['location'] == location:
+                        self._sendGrabBlockMessage(state)
                         return "GrabObject", {'object_id':block['obj_id'] } 
                     
                 id = list(self.collectBlocks.keys())
@@ -262,12 +264,14 @@ class Liar(BaseLineAgent):
 
                 carrying = self.agent_properties['is_carrying']
                 if len(carrying) > 0:
+                    self.msgAboutDropLocation(state)
                     return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] } 
                 
                 for collectBlock in self.collectBlocks.values():
                     if collectBlock['location'] == (x,y) and not collectBlock['is_delivered_confirmed']:
                         for block in blocks:
                             if self.sameVizuals(block, collectBlock) and block['location'] == (x-1,y):
+                                self._sendGrabBlockMessage(state)
                                 return "GrabObject", {'object_id':block['obj_id'] } 
                     if collectBlock['location'] == (x,y) and collectBlock['is_delivered_confirmed']:
                         return "MoveNorth", {}
