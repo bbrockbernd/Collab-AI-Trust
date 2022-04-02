@@ -1,4 +1,5 @@
 
+from distutils.log import error
 from typing import Dict
 import enum, random
 from agents1.BW4TBaselineAgent import BaseLineAgent
@@ -24,7 +25,8 @@ class Phase(enum.Enum):
     PLAN_PATH_TO_REMOVE_ALL_BLOCKS = 13,
     FOLLOW_PATH_TO_REMOVE_ALL_BLOCKS = 14,
     REMOVE_ALL_BLOCKS = 15,
-    REPLACE_ALL_BLOCKS = 15
+    REPLACE_ALL_BLOCKS = 16,
+    DOUBLE_DROPPOFF = 17
 
 
 class Strong(BaseLineAgent):
@@ -78,12 +80,12 @@ class Strong(BaseLineAgent):
                         self.collectBlocks[key] = state[key]
                         self.collectBlocks[key]['drop_actions'] = []
                         self.collectBlocks[key]['is_delivered_confirmed'] = False
+                        self.collectBlocks[key]['is_carried_by_me'] = False
                         self.collectBlocks[key]['is_delivered_by_me'] = False # dropActions = {'agent': None, 'number': None}
                 self.roomsToExplore = [door for door in state.values()
                     if 'class_inheritance' in door and 'Door' in door['class_inheritance']] 
                          
                 self._phase=Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
-                
             if Phase.PLAN_PATH_TO_UNSEARCHED_ROOM==self._phase:
                 self.updateBlocks(state)
                 if len(self.roomsToExplore)>0 and not self._possibleToPlanPathToGoalBlock():
@@ -169,11 +171,24 @@ class Strong(BaseLineAgent):
                 self.updateBlocks(state)
                 if(len(self.agent_properties['is_carrying']) == 0):
                     #NO BLOCKS BRAPPED
-                    self._phase = Phase.PLAN_TO_GOAL_BLOCK
+                    self._phase = Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
                     continue
+                ids = self.collectBlocks.keys()
+                # ids.sort()
+                for block in self.agent_properties['is_carrying']:
+                    
+                    for id in self.collectBlocks.keys():
+                        collectBlock = self.collectBlocks[id]
+                        if self.sameVizuals(collectBlock, block) and not collectBlock['is_carried_by_me'] and not self.knownBlocks[block['obj_id']]['is_carried_by_me']:
+                            self.collectBlocks[id]['is_carried_by_me'] = True
+                            self.knownBlocks[block['obj_id']]['is_carried_by_me'] = True
+                            break
                 
-                self._planPathToDropOff()
-                self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
+                if self._possibleToPlanPathToGoalBlock():
+                    self._phase=Phase.PLAN_TO_GOAL_BLOCK
+                else:    
+                    self._planPathToDropOff()
+                    self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
             
             if Phase.FOLLOW_PATH_TO_DROP_ZONE==self._phase:
                 self.updateBlocks(state)
@@ -185,8 +200,25 @@ class Strong(BaseLineAgent):
                 self._phase=Phase.PLAN_PATH_TO_VERIFY_COLLECTION
                 self.processDropGoalBlockAtCollectPoint(state)
                 self.msgAboutDropLocation(state)
-                return "DropObject", {'object_id':self.agent_properties['is_carrying'][0]['obj_id'] }    
+                self.collectBlocks[self.getCollectBlockIdForCarriedBlock()]['is_carried_by_me'] = False # possibly -1 instead of 0
+                
+                if(len(self.agent_properties['is_carrying']) == 1):
+                    self._phase=Phase.PLAN_PATH_TO_VERIFY_COLLECTION
+                else:
+                    self._phase=Phase.DOUBLE_DROPPOFF
+                return "DropObject", {'object_id':self.getFirstCarriedBlock()['obj_id'] }    
             
+            if Phase.DOUBLE_DROPPOFF==self._phase:
+                self.updateBlocks(state)
+                if(len(self.agent_properties['is_carrying']) == 0):
+                    #NO BLOCKS BRAPPED
+                    self._phase = Phase.PLAN_PATH_TO_UNSEARCHED_ROOM
+                    continue
+                ids = self.collectBlocks.keys()
+
+                self._planPathToDropOff()
+                self._phase=Phase.FOLLOW_PATH_TO_DROP_ZONE
+                
             if Phase.PLAN_PATH_TO_VERIFY_COLLECTION==self._phase:
                 self.updateBlocks(state)
                 self.updateCollect(state)
@@ -283,6 +315,25 @@ class Strong(BaseLineAgent):
                         return "MoveNorth", {}
                 self._phase = Phase.PLAN_TO_GOAL_BLOCK 
                 
+    def getFirstCarriedBlock(self):
+        carrying = self.agent_properties['is_carrying']
+        if len(carrying) == 2:
+            return self.agent_properties['is_carrying'][0]
+        elif len(carrying) == 1:
+            return self.agent_properties['is_carrying'][0] 
+        return None
+        
+        
+    def getCollectBlockIdForCarriedBlock(self):
+        carrying = self.getFirstCarriedBlock()
+        ids = list(self.collectBlocks.keys())
+        ids.sort()
+        for id in ids:
+            collectBlock = self.collectBlocks[id]
+            if self.sameVizuals(collectBlock, carrying) and collectBlock['is_carried_by_me']:
+                return collectBlock['obj_id']
+        return None
+                
                     
     def checkAllCollectBlocksPresent(self):
         for collectBlock in self.collectBlocks.values():
@@ -314,7 +365,7 @@ class Strong(BaseLineAgent):
     def _planPathToUnsearchedRoom(self):
         self._navigator.reset_full()
         # Randomly pick a closed door
-        self._door = self.roomsToExplore[-1]
+        self._door = self.roomsToExplore[0]
         self.roomsToExplore.remove(self._door)
         doorLoc = self._door['location']
         # Location in front of door is south from door
@@ -324,7 +375,7 @@ class Strong(BaseLineAgent):
         
     def getBlockToGrab(self):
         for _collectBlock in self.collectBlocks.values():
-            if not _collectBlock['is_delivered_by_me'] or not _collectBlock['is_delivered_confirmed']:
+            if (not _collectBlock['is_delivered_by_me'] or not _collectBlock['is_delivered_confirmed'] )and not  _collectBlock['is_carried_by_me']:
                 collectBlock = _collectBlock
                 
                 if collectBlock is None:
@@ -333,12 +384,14 @@ class Strong(BaseLineAgent):
                 ids.sort(reverse=True)
                 for id in ids:
                     block = self.knownBlocks[id]
-                    if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block):
+                    if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block) and not block['is_carried_by_me'] :
                         self.blockToGrab = block
                         return block
                 return None
                     
     def _possibleToPlanPathToGoalBlock(self):
+        if (len(self.agent_properties['is_carrying']) == 2):
+            return False
         self._navigator.reset_full()
         collectBlock = self.getBlockToGrab()
         if collectBlock is None:
@@ -349,7 +402,7 @@ class Strong(BaseLineAgent):
               
     def _planPathToDropOff(self):
         self._navigator.reset_full()
-        carriedBlock = self.agent_properties['is_carrying'][0]
+        carriedBlock = self.getFirstCarriedBlock()
         location = (0, 0)
         ids = list(self.collectBlocks.keys())
         ids.sort()
@@ -378,6 +431,7 @@ class Strong(BaseLineAgent):
                     self.knownBlocks[obj_id]["isGoalBlock"] = True
                     self.knownBlocks[obj_id]['is_delivered'] = False
                     self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
+                    self.knownBlocks[obj_id]['is_carried_by_me'] = False                   
                     self.knownBlocks[obj_id]['is_delivered_by_me'] = False                    
             if self.knownBlocks[obj_id]["isGoalBlock"]:
                 self.sendGoalBlockFoundMessage(state, block)
@@ -419,7 +473,7 @@ class Strong(BaseLineAgent):
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])     
         
     def msgAboutDropLocation(self, state:State):
-        carriedBlock = self.agent_properties['is_carrying'][0]
+        carriedBlock = self.getFirstCarriedBlock()
         location = state[self.agent_id]['location']
         block = carriedBlock
         msg = "Dropped goal block " + str({"size":  block['visualization']['size'] 
@@ -427,7 +481,7 @@ class Strong(BaseLineAgent):
                                                         , "colour": block['visualization']['colour']}) + " at drop location " + str(location)        
         super()._sendMessage(msg, state[self.agent_id]['obj_id'])      
                 
-    def updateBlocks(self, block):
+    def updateBlock(self, block):
         obj_id = block['obj_id']
         if obj_id in self.knownBlocks.keys():
             self.knownBlocks[obj_id]['location'] = block['location']
@@ -437,6 +491,7 @@ class Strong(BaseLineAgent):
                         self.knownBlocks[obj_id]['is_delivered'] = True
                         self.knownBlocks[obj_id]['is_delivered_confirmed'] = True
                         self.collectBlocks[collectBlock['obj_id']]['is_delivered_confirmed'] = True
+                        break
                     else:
                         self.knownBlocks[obj_id]['is_delivered'] = False
                         self.knownBlocks[obj_id]['is_delivered_confirmed'] = False
@@ -449,7 +504,7 @@ class Strong(BaseLineAgent):
     def updateBlocks(self, state:State):
         for block in self.detectBlocksAround(state):
             self.addNewBlock(state, block)
-            self.updateBlocks(block)
+            self.updateBlock(block)
                                
             
     def checkGoalBlockPresent(self, state:State):
@@ -459,7 +514,7 @@ class Strong(BaseLineAgent):
         return False
     
     def processDropGoalBlockAtCollectPoint(self, state:State):
-        carriedBlock = self.agent_properties['is_carrying'][0]
+        carriedBlock = self.getFirstCarriedBlock()
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered_by_me'] = True
         self.knownBlocks[carriedBlock['obj_id']]['is_delivered'] = True
         for key in self.collectBlocks.keys():
