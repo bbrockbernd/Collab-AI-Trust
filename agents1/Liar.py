@@ -338,7 +338,6 @@ class Liar(BaseLineAgent):
                     if block['isGoalBlock'] and block['is_delivered'] == False and self.sameVizuals(collectBlock, block):
                         possibleRelevantActions = []
                         for action in actions:
-                            print(action[2], self.agent_id)
                             if block['location'] == action[1] and super()._trustInAgent(agent_id= action[2]):
                                 possibleRelevantActions.append(action)
                                 break
@@ -561,7 +560,7 @@ class Liar(BaseLineAgent):
         for block in self.knownBlocks.values():
             if (block['location'] == location):
                 possible_blocks.append(block)
-                if color is "?" and block['visualization']['shape'] == shape: 
+                if color == "?" and block['visualization']['shape'] == shape: 
                     return 1
                 elif (block['visualization']['colour'] == color and 
                     block['visualization']['shape'] == shape):
