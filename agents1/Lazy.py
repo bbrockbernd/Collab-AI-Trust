@@ -45,7 +45,7 @@ class MyBlock:
         self.size = block_obj['visualization']['size']
         self.isGoal = isGoal
         self.location = block_obj['location']
-        self.dropPoint = None
+        self.dropPoints = []
         self.completed = False
         self.room = room
         self.myid = str(self.shape) + self.color
@@ -57,8 +57,15 @@ class MyBlock:
         }
 
 
-    def set_drop_point(self, dp: MyDropPoint):
-        self.dropPoint = dp
+    def add_drop_point(self, dp: MyDropPoint):
+        self.dropPoints.append(dp)
+        self.dropPoints.sort(key=lambda dp: dp.obj_id)
+
+    def get_drop_point(self):
+        for dp in self.dropPoints:
+            if not dp.completed:
+                return dp
+        return None
 
 
 class MyRoom:
@@ -102,7 +109,7 @@ class MyWorld:
 
         for dp in self.dropPoints:
             if dp.myid == block.myid:
-                block.dropPoint = dp
+                block.add_drop_point(dp)
                 block.isGoal = True
                 dp.goals.append(block)
 
@@ -151,8 +158,6 @@ class Lazy(BaseLineAgent):
         self._inventory = None
         self._isCarrying = False
         self._checked_locations = []
-        self._droppoint = None
-
         self._quitting = False
         self._counter = 0
 
@@ -186,7 +191,7 @@ class Lazy(BaseLineAgent):
         self._counter += 1
 
         if self._mode == Mode.GOAL and self._inventory is not None:
-            if self._inventory.dropPoint.completed:
+            if self._world.getGoals()[0].get_drop_point() is not self._inventory.get_drop_point():
                 self._phase = Phase.DROP
 
         if self._mode is Mode.GOAL:
@@ -278,8 +283,8 @@ class Lazy(BaseLineAgent):
             return self.next(Phase.WHAT_TO_DO)
 
 
-        self._dest_id = block.dropPoint.obj_id
-        self._destination = block.dropPoint.location
+        self._dest_id = block.get_drop_point().obj_id
+        self._destination = block.get_drop_point().location
         self._phase = Phase.CALCULATING
         self._inventory = block
 
@@ -290,7 +295,7 @@ class Lazy(BaseLineAgent):
         block = self._inventory
         self._inventory = None
         block.completed = True
-        block.dropPoint.completed = True
+        block.get_drop_point().completed = True
         self._phase = Phase.WHAT_TO_DO
 
         super()._sendMessage(f'Dropped goal block {block.visualization} at drop location {self._location}', self.agent_id)
