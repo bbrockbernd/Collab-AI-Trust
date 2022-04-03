@@ -19,8 +19,8 @@ from bw4t.BW4THumanBrain import HumanBrain
 def createwordsettings (): 
     block_per_room =  np.random.randint(2,3) #2
     seed = np.random.randint(1,100) #91
-    nr_rooms = np.random.randint(40/block_per_room, 150/block_per_room) #35
-    rooms_per_row =  np.random.randint(9/block_per_room,30/block_per_room) #14
+    nr_rooms = np.random.randint(40/block_per_room, 70/block_per_room) #35
+    rooms_per_row =  np.random.randint(9/block_per_room,20/block_per_room) #14
     print("starting world with: " + str({"block_per_room": block_per_room, "seed": seed, "nr_rooms": nr_rooms, "rooms_per_row": rooms_per_row}))
     return {
     'deadline': 3000, # Ticks after which world terminates anyway 
@@ -28,8 +28,8 @@ def createwordsettings ():
     'random_seed': seed,
     'verbose': False,
     'matrx_paused':False,
-    'run_matrx_api':True, # If you want to allow web connection
-    'run_matrx_visualizer':True, # if you want to allow web visualizer
+    'run_matrx_api':False, # If you want to allow web connection
+    'run_matrx_visualizer':False, # if you want to allow web visualizer
 
     'key_action_map': {  # For the human agents
         'w': MoveNorth.__name__,
