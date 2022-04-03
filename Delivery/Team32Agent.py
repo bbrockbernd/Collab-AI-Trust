@@ -683,7 +683,7 @@ class BW4TAgentBrain(AgentBrain):
 
 
 
-class Colorblind(BaseLineAgent):
+class ColorblindAgent(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
@@ -1215,7 +1215,7 @@ class MyWorld:
             return ""
 
 
-class Lazy(BaseLineAgent):
+class LazyAgent(BaseLineAgent):
 
     def __init__(self, settings: Dict[str, object]):
         super().__init__(settings)
@@ -1482,7 +1482,7 @@ class Lazy(BaseLineAgent):
 
 
 
-class Liar(BaseLineAgent):
+class LiarAgent(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
@@ -2038,7 +2038,7 @@ class Liar(BaseLineAgent):
 
 
 
-class Strong(BaseLineAgent):
+class StrongAgent(BaseLineAgent):
 
     def __init__(self, settings:Dict[str,object]):
         super().__init__(settings)
