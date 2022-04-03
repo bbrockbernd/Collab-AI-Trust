@@ -33,7 +33,7 @@ def getSuccesRate():
 This runs a single session. You have to log in on localhost:3000 and 
 press the start button in god mode to start the session.
 """
-for i in range(1,100): 
+for i in range(30): 
   if __name__ == "__main__":
       agents = [
         {'name': 'Color1', 'botclass': Colorblind, 'settings': {}},
@@ -49,9 +49,9 @@ for i in range(1,100):
       
       print("Started world...")
       wordsetttings = createwordsettings()
-      wordsetttings['tick_duration'] = 0.01 #set lower for faster speed, default seems 0.1
+      wordsetttings['tick_duration'] = 0.00000001 #set lower for faster speed, default seems 0.1
       world=BW4TWorld(agents, worldsettings=wordsetttings).run()
-      print("DONE!")
+      print("DONE!", i)
       print(Statistics(world.getLogger().getFileName()))
       getSuccesRate()
       
