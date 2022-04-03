@@ -282,7 +282,8 @@ class Lazy(BaseLineAgent):
             self._world.removeBlock(block)
             return self.next(Phase.WHAT_TO_DO)
 
-
+        if block.get_drop_point() is None:
+            return self.next(Phase.WHAT_TO_DO)
         self._dest_id = block.get_drop_point().obj_id
         self._destination = block.get_drop_point().location
         self._phase = Phase.CALCULATING
